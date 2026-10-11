@@ -1,0 +1,1804 @@
+{
+  "baseline": {
+    "unaudited": 587
+  },
+  "entries": {
+    "AreaBoundary": {
+      "status": "unaudited"
+    },
+    "Autocomplete": {
+      "status": "unaudited"
+    },
+    "AutocompleteOptions": {
+      "status": "unaudited"
+    },
+    "AutocompleteUpdateOptions": {
+      "status": "unaudited"
+    },
+    "BMAP_COMPONENT_EVENT_CATALOG": {
+      "status": "unaudited"
+    },
+    "BMapClient": {
+      "status": "unaudited"
+    },
+    "BMapClientContext": {
+      "status": "unaudited"
+    },
+    "BMapDriver": {
+      "status": "fixed",
+      "note": "#212 `cf8efb9`：新增可选 member `isMapHandleLive?`（跨 Client / 已销毁地图判据）"
+    },
+    "BMapDriverFactory": {
+      "status": "unaudited"
+    },
+    "BMapDriverInput": {
+      "status": "unaudited"
+    },
+    "BMapDrivingRouteOptions": {
+      "status": "unaudited"
+    },
+    "BMapEngine": {
+      "status": "unaudited"
+    },
+    "BMapError": {
+      "status": "unaudited"
+    },
+    "BMapErrorCode": {
+      "status": "unaudited"
+    },
+    "BMapErrorOptions": {
+      "status": "unaudited"
+    },
+    "BMapGeoResult": {
+      "status": "unaudited"
+    },
+    "BMapGeolocationOptions": {
+      "status": "unaudited"
+    },
+    "BMapIpLocationResult": {
+      "status": "unaudited"
+    },
+    "BMapLoadOptions": {
+      "status": "unaudited"
+    },
+    "BMapLocalSearchOperation": {
+      "status": "unaudited"
+    },
+    "BMapLocalSearchOptions": {
+      "status": "unaudited"
+    },
+    "BMapLocalSearchRenderOptions": {
+      "status": "unaudited"
+    },
+    "BMapPluginConfig": {
+      "status": "unaudited"
+    },
+    "BMapPluginDefinition": {
+      "status": "unaudited"
+    },
+    "BMapProvider": {
+      "status": "unaudited"
+    },
+    "BMapProviderLike": {
+      "status": "unaudited"
+    },
+    "BMapProviderProps": {
+      "status": "unaudited"
+    },
+    "BMapResolver": {
+      "status": "unaudited"
+    },
+    "BMapRidingRouteOptions": {
+      "status": "unaudited"
+    },
+    "BMapRouteLocation": {
+      "status": "unaudited"
+    },
+    "BMapRouteRenderOptions": {
+      "status": "unaudited"
+    },
+    "BMapServiceStatus": {
+      "status": "unaudited"
+    },
+    "BMapTransitRouteOptions": {
+      "status": "unaudited"
+    },
+    "BMapWalkingRouteOptions": {
+      "status": "unaudited"
+    },
+    "BUILTIN_PLUGIN_CATALOG": {
+      "status": "unaudited"
+    },
+    "BUILTIN_PLUGIN_NAMES": {
+      "status": "unaudited"
+    },
+    "BUILTIN_PLUGIN_URLS": {
+      "status": "unaudited"
+    },
+    "BaiduJsapiV4ProviderOptions": {
+      "status": "unaudited"
+    },
+    "BezierCurve": {
+      "status": "unaudited"
+    },
+    "BezierCurveProps": {
+      "status": "unaudited"
+    },
+    "BoundaryParseRequest": {
+      "status": "fixed",
+      "note": "#211 `85720cc`：新增并导出该请求类型"
+    },
+    "BoundaryRequest": {
+      "status": "unaudited"
+    },
+    "BoundaryRings": {
+      "status": "unaudited"
+    },
+    "Bounds": {
+      "status": "unaudited"
+    },
+    "BuiltinMarkerIconName": {
+      "status": "unaudited"
+    },
+    "BuiltinPluginName": {
+      "status": "unaudited"
+    },
+    "CAPABILITY_CATALOG": {
+      "status": "unaudited"
+    },
+    "CAPABILITY_FAMILIES": {
+      "status": "unaudited"
+    },
+    "CAPABILITY_IDS": {
+      "status": "unaudited"
+    },
+    "CAPABILITY_STATUSES": {
+      "status": "unaudited"
+    },
+    "Capability": {
+      "status": "unaudited"
+    },
+    "CapabilityDescriptor": {
+      "status": "unaudited"
+    },
+    "CapabilityExplanation": {
+      "status": "unaudited"
+    },
+    "CapabilityFamily": {
+      "status": "unaudited"
+    },
+    "CapabilityReason": {
+      "status": "unaudited"
+    },
+    "CapabilityRegistry": {
+      "status": "unaudited"
+    },
+    "CapabilityStatus": {
+      "status": "unaudited"
+    },
+    "Circle": {
+      "status": "unaudited"
+    },
+    "CircleHandle": {
+      "status": "unaudited"
+    },
+    "CircleProps": {
+      "status": "unaudited"
+    },
+    "CircleReadBackApi": {
+      "status": "unaudited"
+    },
+    "CityListCommandApi": {
+      "status": "unaudited"
+    },
+    "CityListControl": {
+      "status": "unaudited"
+    },
+    "ClientStatus": {
+      "status": "unaudited"
+    },
+    "ClusterChange": {
+      "status": "unaudited"
+    },
+    "ClusterPick": {
+      "status": "unaudited"
+    },
+    "ClusterPointIconSource": {
+      "status": "unaudited"
+    },
+    "ComponentResolverLike": {
+      "status": "unaudited"
+    },
+    "ContextMenu": {
+      "status": "unaudited"
+    },
+    "ContextMenuCommandApi": {
+      "status": "unaudited"
+    },
+    "ContextMenuExpose": {
+      "status": "unaudited"
+    },
+    "ContextMenuItem": {
+      "status": "unaudited"
+    },
+    "ContextMenuProps": {
+      "status": "unaudited"
+    },
+    "ContextMenuSelectPayload": {
+      "status": "unaudited"
+    },
+    "ContextMenuSeparator": {
+      "status": "unaudited"
+    },
+    "ControlCommandTypes": {
+      "status": "unaudited"
+    },
+    "ControlDriver": {
+      "status": "unaudited"
+    },
+    "ControlHandle": {
+      "status": "unaudited"
+    },
+    "ControlKind": {
+      "status": "unaudited"
+    },
+    "ControlOptionStatus": {
+      "status": "unaudited"
+    },
+    "ControlOptions": {
+      "status": "unaudited"
+    },
+    "ControllableMode": {
+      "status": "unaudited"
+    },
+    "ControllableState": {
+      "status": "unaudited"
+    },
+    "ConvertorRequest": {
+      "status": "unaudited"
+    },
+    "CoordinateFromType": {
+      "status": "unaudited"
+    },
+    "CoordinateToType": {
+      "status": "unaudited"
+    },
+    "CoordinatesFromType": {
+      "status": "unaudited"
+    },
+    "CoordinatesToType": {
+      "status": "unaudited"
+    },
+    "CopyrightControl": {
+      "status": "unaudited"
+    },
+    "CopyrightEntry": {
+      "status": "unaudited"
+    },
+    "CreateBMapClientOptions": {
+      "status": "unaudited"
+    },
+    "CreateBMapPluginOptions": {
+      "status": "unaudited"
+    },
+    "CreateCapabilityRegistryOptions": {
+      "status": "unaudited"
+    },
+    "CreateJsapiV4DriverInput": {
+      "status": "unaudited"
+    },
+    "CreateLoadedJsapiV4Input": {
+      "status": "unaudited"
+    },
+    "CrossOriginValue": {
+      "status": "unaudited"
+    },
+    "CustomControl": {
+      "status": "unaudited"
+    },
+    "CustomOverlay": {
+      "status": "unaudited"
+    },
+    "CustomOverlayOptions": {
+      "status": "unaudited"
+    },
+    "CustomOverlayProps": {
+      "status": "unaudited"
+    },
+    "CustomScriptV4ProviderOptions": {
+      "status": "unaudited"
+    },
+    "DOMLayer": {
+      "status": "unaudited"
+    },
+    "DataComponentProps": {
+      "status": "unaudited"
+    },
+    "Disposer": {
+      "status": "unaudited"
+    },
+    "DistrictLayer": {
+      "status": "unaudited"
+    },
+    "DistrictType": {
+      "status": "unaudited"
+    },
+    "DistrictTypeValue": {
+      "status": "unaudited"
+    },
+    "DriverEvent": {
+      "status": "unaudited"
+    },
+    "DrivingPolicy": {
+      "status": "unaudited"
+    },
+    "DrivingRouteEndpoint": {
+      "status": "unaudited"
+    },
+    "DrivingRouteOptions": {
+      "status": "unaudited"
+    },
+    "DrivingRouteRequest": {
+      "status": "unaudited"
+    },
+    "DrivingRouteResult": {
+      "status": "unaudited"
+    },
+    "EqualFn": {
+      "status": "unaudited"
+    },
+    "EventDriver": {
+      "status": "unaudited"
+    },
+    "EventSourceClient": {
+      "status": "unaudited"
+    },
+    "FeaturePick": {
+      "status": "unaudited"
+    },
+    "FeatureStateApi": {
+      "status": "unaudited"
+    },
+    "FeatureStateKeyDomain": {
+      "status": "unaudited"
+    },
+    "FeatureStateKeys": {
+      "status": "unaudited"
+    },
+    "FeatureStateKeysOf": {
+      "status": "unaudited"
+    },
+    "FeatureStateUpdateOptions": {
+      "status": "unaudited"
+    },
+    "FillLayer": {
+      "status": "unaudited"
+    },
+    "FillLayerProps": {
+      "status": "unaudited"
+    },
+    "FillLayerStyle": {
+      "status": "unaudited"
+    },
+    "FlyToOptions": {
+      "status": "unaudited"
+    },
+    "FrameScheduler": {
+      "status": "unaudited"
+    },
+    "GeoJSONLayer": {
+      "status": "unaudited"
+    },
+    "GeoPoint": {
+      "status": "unaudited"
+    },
+    "GeocodeDetailAddressComponents": {
+      "status": "unaudited"
+    },
+    "GeocodeDetailItemResult": {
+      "status": "unaudited"
+    },
+    "GeocodeDetailLocationOptions": {
+      "status": "fixed",
+      "note": "#210 `d9304f5`：新增并导出该选项类型"
+    },
+    "GeocodeDetailResult": {
+      "status": "unaudited"
+    },
+    "GeocodeItemResult": {
+      "status": "unaudited"
+    },
+    "GeocodeRequest": {
+      "status": "unaudited"
+    },
+    "GeocodedAddress": {
+      "status": "unaudited"
+    },
+    "GeocodedAddressComponents": {
+      "status": "unaudited"
+    },
+    "GeolocationAddressInfo": {
+      "status": "unaudited"
+    },
+    "GeolocationFix": {
+      "status": "unaudited"
+    },
+    "GeolocationOptions": {
+      "status": "unaudited"
+    },
+    "GeometryDriver": {
+      "status": "unaudited"
+    },
+    "GroundOverlay": {
+      "status": "unaudited"
+    },
+    "GroundOverlayProps": {
+      "status": "unaudited"
+    },
+    "GroundOverlayType": {
+      "status": "unaudited"
+    },
+    "GroundOverlayUrl": {
+      "status": "unaudited"
+    },
+    "GroundPoint": {
+      "status": "unaudited"
+    },
+    "HANDLE_BRAND": {
+      "status": "unaudited"
+    },
+    "HeatmapLayer": {
+      "status": "unaudited"
+    },
+    "HeatmapLayerProps": {
+      "status": "unaudited"
+    },
+    "InfoWindow": {
+      "status": "unaudited"
+    },
+    "InfoWindowHandle": {
+      "status": "unaudited"
+    },
+    "InfoWindowOptions": {
+      "status": "unaudited"
+    },
+    "InfoWindowProps": {
+      "status": "unaudited"
+    },
+    "InfoWindowReadBackApi": {
+      "status": "unaudited"
+    },
+    "InitialMapOptions": {
+      "status": "unaudited"
+    },
+    "IntercityPolicy": {
+      "status": "unaudited"
+    },
+    "JsapiV4Driver": {
+      "status": "unaudited"
+    },
+    "JsapiV4Engine": {
+      "status": "unaudited"
+    },
+    "JsapiV4LoadMetadata": {
+      "status": "unaudited"
+    },
+    "JsapiV4LoadMode": {
+      "status": "unaudited"
+    },
+    "JsapiV4Namespace": {
+      "status": "unaudited"
+    },
+    "JsapiV4Provider": {
+      "status": "unaudited"
+    },
+    "JsapiV4ProviderId": {
+      "status": "unaudited"
+    },
+    "JsapiV4ScriptMode": {
+      "status": "unaudited"
+    },
+    "JsapiV4ServiceDriver": {
+      "status": "unaudited"
+    },
+    "JsapiV4VersionSource": {
+      "status": "unaudited"
+    },
+    "Label": {
+      "status": "unaudited"
+    },
+    "LabelHandle": {
+      "status": "unaudited"
+    },
+    "LabelOptions": {
+      "status": "unaudited"
+    },
+    "LabelProps": {
+      "status": "unaudited"
+    },
+    "LabelStyle": {
+      "status": "unaudited"
+    },
+    "LayerCreateOptions": {
+      "status": "unaudited"
+    },
+    "LayerCtorSlot": {
+      "status": "unaudited"
+    },
+    "LayerData": {
+      "status": "unaudited"
+    },
+    "LayerDriver": {
+      "status": "unaudited"
+    },
+    "LayerHandle": {
+      "status": "unaudited"
+    },
+    "LayerKind": {
+      "status": "unaudited"
+    },
+    "LayerOperation": {
+      "status": "unaudited"
+    },
+    "LayerSurface": {
+      "status": "unaudited"
+    },
+    "LineLayer": {
+      "status": "unaudited"
+    },
+    "LineLayerProps": {
+      "status": "unaudited"
+    },
+    "LineLayerStyle": {
+      "status": "unaudited"
+    },
+    "LoadedJsapiV4": {
+      "status": "unaudited"
+    },
+    "LocalCityFix": {
+      "status": "unaudited"
+    },
+    "LocalSearchBounds": {
+      "status": "unaudited"
+    },
+    "LocalSearchInBoundsRequest": {
+      "status": "unaudited"
+    },
+    "LocalSearchKeyword": {
+      "status": "unaudited"
+    },
+    "LocalSearchLocation": {
+      "status": "unaudited"
+    },
+    "LocalSearchNearbyRequest": {
+      "status": "unaudited"
+    },
+    "LocalSearchOptions": {
+      "status": "unaudited"
+    },
+    "LocalSearchPoi": {
+      "status": "unaudited"
+    },
+    "LocalSearchRenderOptions": {
+      "status": "unaudited"
+    },
+    "LocalSearchResult": {
+      "status": "unaudited"
+    },
+    "LocalSearchSearchOption": {
+      "status": "unaudited"
+    },
+    "LocationAddressComponents": {
+      "status": "unaudited"
+    },
+    "LocationCommandApi": {
+      "status": "unaudited"
+    },
+    "LocationControl": {
+      "status": "unaudited"
+    },
+    "MAP_EVENT_CATALOG": {
+      "status": "unaudited"
+    },
+    "MAP_EVENT_EMIT_ALIASES": {
+      "status": "unaudited"
+    },
+    "MAP_EVENT_NAMES": {
+      "status": "unaudited"
+    },
+    "MAP_SUSPEND_REASONS": {
+      "status": "unaudited"
+    },
+    "MVTLayer": {
+      "status": "unaudited"
+    },
+    "MVTLayerBaseEvent": {
+      "status": "unaudited"
+    },
+    "MVTLayerEntity": {
+      "status": "unaudited"
+    },
+    "MVTLayerMouseEvent": {
+      "status": "unaudited"
+    },
+    "MVTLayerMouseMoveEvent": {
+      "status": "unaudited"
+    },
+    "MVTLayerPickEvent": {
+      "status": "unaudited"
+    },
+    "MVTLayerProps": {
+      "status": "unaudited"
+    },
+    "MVTLayerStyle": {
+      "status": "unaudited"
+    },
+    "MVTLayerStyleEntry": {
+      "status": "unaudited"
+    },
+    "Map": {
+      "status": "unaudited"
+    },
+    "MapCommands": {
+      "status": "unaudited"
+    },
+    "MapComponentEventName": {
+      "status": "unaudited"
+    },
+    "MapContext": {
+      "status": "unaudited"
+    },
+    "MapDriver": {
+      "status": "unaudited"
+    },
+    "MapEventDefinition": {
+      "status": "unaudited"
+    },
+    "MapEventEmits": {
+      "status": "unaudited"
+    },
+    "MapEventHandler": {
+      "status": "unaudited"
+    },
+    "MapEventMap": {
+      "status": "unaudited"
+    },
+    "MapEventName": {
+      "status": "unaudited"
+    },
+    "MapEventPayload": {
+      "status": "unaudited"
+    },
+    "MapEventPayloadForName": {
+      "status": "unaudited"
+    },
+    "MapEventPayloadKind": {
+      "status": "unaudited"
+    },
+    "MapEventPayloadOf": {
+      "status": "unaudited"
+    },
+    "MapEventSdkName": {
+      "status": "unaudited"
+    },
+    "MapEventSource": {
+      "status": "unaudited"
+    },
+    "MapEventSourceInput": {
+      "status": "unaudited"
+    },
+    "MapExpose": {
+      "status": "unaudited"
+    },
+    "MapHandle": {
+      "status": "unaudited"
+    },
+    "MapInteraction": {
+      "status": "unaudited"
+    },
+    "MapLoadEvent": {
+      "status": "unaudited"
+    },
+    "MapLoadPayload": {
+      "status": "unaudited"
+    },
+    "MapMask": {
+      "status": "unaudited"
+    },
+    "MapMaskShowRegion": {
+      "status": "unaudited"
+    },
+    "MapMouseEvent": {
+      "status": "unaudited"
+    },
+    "MapPointerEvent": {
+      "status": "unaudited"
+    },
+    "MapProps": {
+      "status": "unaudited"
+    },
+    "MapReadyContext": {
+      "status": "unaudited"
+    },
+    "MapResizeEvent": {
+      "status": "unaudited"
+    },
+    "MapResizePayload": {
+      "status": "unaudited"
+    },
+    "MapStatus": {
+      "status": "unaudited"
+    },
+    "MapStatusRefs": {
+      "status": "unaudited"
+    },
+    "MapStyleInput": {
+      "status": "unaudited"
+    },
+    "MapSuspendReason": {
+      "status": "unaudited"
+    },
+    "MapType": {
+      "status": "unaudited"
+    },
+    "MapTypeChangeEvent": {
+      "status": "unaudited"
+    },
+    "MapTypeChangePayload": {
+      "status": "unaudited"
+    },
+    "MapTypeControl": {
+      "status": "unaudited"
+    },
+    "MapTypeIdName": {
+      "status": "unaudited"
+    },
+    "MapView": {
+      "status": "unaudited"
+    },
+    "Marker": {
+      "status": "unaudited"
+    },
+    "Marker3D": {
+      "status": "unaudited"
+    },
+    "MarkerCluster": {
+      "status": "unaudited"
+    },
+    "MarkerClusterEngine": {
+      "status": "unaudited"
+    },
+    "MarkerClusterProps": {
+      "status": "unaudited"
+    },
+    "MarkerCustomIcon": {
+      "status": "unaudited"
+    },
+    "MarkerHandle": {
+      "status": "unaudited"
+    },
+    "MarkerIcon": {
+      "status": "unaudited"
+    },
+    "MarkerIconInput": {
+      "status": "unaudited"
+    },
+    "MarkerIconName": {
+      "status": "unaudited"
+    },
+    "MarkerLabelInput": {
+      "status": "unaudited"
+    },
+    "MarkerLabelSpec": {
+      "status": "unaudited"
+    },
+    "MarkerList": {
+      "status": "unaudited"
+    },
+    "MarkerListProps": {
+      "status": "unaudited"
+    },
+    "MarkerOptions": {
+      "status": "unaudited"
+    },
+    "MarkerProps": {
+      "status": "unaudited"
+    },
+    "MarkerReadBackApi": {
+      "status": "unaudited"
+    },
+    "MenuItem": {
+      "status": "unaudited"
+    },
+    "MenuItemProps": {
+      "status": "unaudited"
+    },
+    "MenuItemView": {
+      "status": "unaudited"
+    },
+    "MenuSeparator": {
+      "status": "unaudited"
+    },
+    "NativeLayerCommonProps": {
+      "status": "unaudited"
+    },
+    "NativeLayerData": {
+      "status": "unaudited"
+    },
+    "NativeLayerDriver": {
+      "status": "unaudited"
+    },
+    "NativeLayerFeatureKeys": {
+      "status": "unaudited"
+    },
+    "NativeLayerFeatureState": {
+      "status": "unaudited"
+    },
+    "NativeLayerFeatureStateMap": {
+      "status": "unaudited"
+    },
+    "NativeLayerHandle": {
+      "status": "unaudited"
+    },
+    "NativeLayerKind": {
+      "status": "unaudited"
+    },
+    "NativeLayerOperation": {
+      "status": "unaudited"
+    },
+    "NativeLayerPick": {
+      "status": "unaudited"
+    },
+    "NativeLayerPickOptions": {
+      "status": "unaudited"
+    },
+    "NativeLayerTextPick": {
+      "status": "unaudited"
+    },
+    "NativeLayerZoomRange": {
+      "status": "unaudited"
+    },
+    "NavigationControl": {
+      "status": "unaudited"
+    },
+    "NavigationControl3D": {
+      "status": "unaudited"
+    },
+    "NormalizedProvider": {
+      "status": "unaudited"
+    },
+    "OFFICIAL_V4_VERSION": {
+      "status": "unaudited"
+    },
+    "OVERLAY_EVENT_MATRIX": {
+      "status": "unaudited"
+    },
+    "OVERLAY_KINDS_WITHOUT_EVENT_MATRIX": {
+      "status": "unaudited"
+    },
+    "OfficialJsapiLoadOptions": {
+      "status": "unaudited"
+    },
+    "OfficialJsapiLoader": {
+      "status": "unaudited"
+    },
+    "OfficialJsapiV4Version": {
+      "status": "unaudited"
+    },
+    "OverlayAnchor": {
+      "status": "unaudited"
+    },
+    "OverlayAnchorName": {
+      "status": "unaudited"
+    },
+    "OverlayCommandTypes": {
+      "status": "unaudited"
+    },
+    "OverlayDriver": {
+      "status": "unaudited"
+    },
+    "OverlayEventDefinition": {
+      "status": "unaudited"
+    },
+    "OverlayEventMatrixEntry": {
+      "status": "unaudited"
+    },
+    "OverlayEventMatrixKey": {
+      "status": "unaudited"
+    },
+    "OverlayEventPayload": {
+      "status": "unaudited"
+    },
+    "OverlayEventPayloadKind": {
+      "status": "unaudited"
+    },
+    "OverlayEventSpec": {
+      "status": "unaudited"
+    },
+    "OverlayFieldMap": {
+      "status": "unaudited"
+    },
+    "OverlayFieldUpdate": {
+      "status": "unaudited"
+    },
+    "OverlayFieldWatch": {
+      "status": "unaudited"
+    },
+    "OverlayHandle": {
+      "status": "unaudited"
+    },
+    "OverlayKind": {
+      "status": "unaudited"
+    },
+    "OverlayPartialPointerEvent": {
+      "status": "unaudited"
+    },
+    "OverlayPointerEvent": {
+      "status": "unaudited"
+    },
+    "OverlayPositionModel": {
+      "status": "unaudited"
+    },
+    "OverlayPropertyPolicy": {
+      "status": "unaudited"
+    },
+    "OverlaySpec": {
+      "status": "unaudited"
+    },
+    "OverlayTarget": {
+      "status": "unaudited"
+    },
+    "OverviewMapControl": {
+      "status": "unaudited"
+    },
+    "PLUGIN_COMPAT_BY_ID": {
+      "status": "unaudited"
+    },
+    "PLUGIN_COMPAT_INVENTORY": {
+      "status": "unaudited"
+    },
+    "PLUGIN_EVIDENCE_BASIS_MEANING": {
+      "status": "unaudited"
+    },
+    "PLUGIN_VERDICTS": {
+      "status": "unaudited"
+    },
+    "PLUGIN_VERDICT_MEANING": {
+      "status": "unaudited"
+    },
+    "PanToOptions": {
+      "status": "unaudited"
+    },
+    "Panorama": {
+      "status": "unaudited"
+    },
+    "PanoramaCaptureOptions": {
+      "status": "unaudited"
+    },
+    "PanoramaControl": {
+      "status": "unaudited"
+    },
+    "PanoramaCoverageLayer": {
+      "status": "unaudited"
+    },
+    "PanoramaDataInfo": {
+      "status": "unaudited"
+    },
+    "PanoramaDriver": {
+      "status": "unaudited"
+    },
+    "PanoramaHandle": {
+      "status": "unaudited"
+    },
+    "PanoramaLabel": {
+      "status": "unaudited"
+    },
+    "PanoramaLabelHandle": {
+      "status": "unaudited"
+    },
+    "PanoramaLabelOptions": {
+      "status": "unaudited"
+    },
+    "PanoramaLink": {
+      "status": "unaudited"
+    },
+    "PanoramaOptions": {
+      "status": "unaudited"
+    },
+    "PanoramaPoiType": {
+      "status": "unaudited"
+    },
+    "PanoramaPov": {
+      "status": "unaudited"
+    },
+    "PanoramaSceneType": {
+      "status": "unaudited"
+    },
+    "PanoramaServiceHandle": {
+      "status": "unaudited"
+    },
+    "PanoramaSwitchOptions": {
+      "status": "unaudited"
+    },
+    "PanoramaViewerDriver": {
+      "status": "unaudited"
+    },
+    "PathOptions": {
+      "status": "unaudited"
+    },
+    "PathReadBackApi": {
+      "status": "unaudited"
+    },
+    "Pixel": {
+      "status": "unaudited"
+    },
+    "PlaceAutocomplete": {
+      "status": "unaudited"
+    },
+    "PlaceAutocompleteDisplayDTO": {
+      "status": "unaudited"
+    },
+    "PlaceAutocompleteExpose": {
+      "status": "unaudited"
+    },
+    "PlaceAutocompleteProps": {
+      "status": "unaudited"
+    },
+    "PlaceBoundsDTO": {
+      "status": "unaudited"
+    },
+    "PlaceDetail": {
+      "status": "unaudited"
+    },
+    "PlaceDetailDTO": {
+      "status": "unaudited"
+    },
+    "PlaceDetailDisplayDTO": {
+      "status": "unaudited"
+    },
+    "PlaceDetailExpose": {
+      "status": "unaudited"
+    },
+    "PlaceDetailPlaceInput": {
+      "status": "unaudited"
+    },
+    "PlaceDetailPlaceObject": {
+      "status": "unaudited"
+    },
+    "PlaceDetailProps": {
+      "status": "unaudited"
+    },
+    "PlaceHighlightChangeDTO": {
+      "status": "unaudited"
+    },
+    "PlaceHighlightDTO": {
+      "status": "unaudited"
+    },
+    "PlacePoiDTO": {
+      "status": "unaudited"
+    },
+    "PlacePointDTO": {
+      "status": "unaudited"
+    },
+    "PlaceSearch": {
+      "status": "unaudited"
+    },
+    "PlaceSearchDisplayDTO": {
+      "status": "unaudited"
+    },
+    "PlaceSearchExpose": {
+      "status": "unaudited"
+    },
+    "PlaceSearchProps": {
+      "status": "unaudited"
+    },
+    "PlaceSuggestionDTO": {
+      "status": "unaudited"
+    },
+    "PluginCatalogEntry": {
+      "status": "unaudited"
+    },
+    "PluginCompatEntry": {
+      "status": "unaudited"
+    },
+    "PluginContext": {
+      "status": "unaudited"
+    },
+    "PluginEvidenceBasis": {
+      "status": "unaudited"
+    },
+    "PluginHost": {
+      "status": "unaudited"
+    },
+    "PluginHostEntryInspection": {
+      "status": "unaudited"
+    },
+    "PluginHostEntryStatus": {
+      "status": "unaudited"
+    },
+    "PluginMigrationPath": {
+      "status": "unaudited"
+    },
+    "PluginRuntimeReading": {
+      "status": "unaudited"
+    },
+    "PluginScope": {
+      "status": "unaudited"
+    },
+    "PluginUrlKey": {
+      "status": "unaudited"
+    },
+    "PluginVerdict": {
+      "status": "unaudited"
+    },
+    "PluginVersionLock": {
+      "status": "unaudited"
+    },
+    "Point": {
+      "status": "unaudited"
+    },
+    "PointCollection": {
+      "status": "unaudited"
+    },
+    "PointCollectionProps": {
+      "status": "unaudited"
+    },
+    "PointIconLayer": {
+      "status": "unaudited"
+    },
+    "PointIconLayerProps": {
+      "status": "unaudited"
+    },
+    "PointInput": {
+      "status": "unaudited"
+    },
+    "PointLayer": {
+      "status": "unaudited"
+    },
+    "PointLayerProps": {
+      "status": "unaudited"
+    },
+    "PointLike": {
+      "status": "unaudited"
+    },
+    "PointPick": {
+      "status": "unaudited"
+    },
+    "Polygon": {
+      "status": "unaudited"
+    },
+    "PolygonHandle": {
+      "status": "unaudited"
+    },
+    "PolygonLayer": {
+      "status": "unaudited"
+    },
+    "PolygonLayerProps": {
+      "status": "unaudited"
+    },
+    "PolygonLayerStyle": {
+      "status": "unaudited"
+    },
+    "PolygonProps": {
+      "status": "unaudited"
+    },
+    "Polyline": {
+      "status": "unaudited"
+    },
+    "PolylineHandle": {
+      "status": "unaudited"
+    },
+    "PolylineLayer": {
+      "status": "unaudited"
+    },
+    "PolylineLayerProps": {
+      "status": "unaudited"
+    },
+    "PolylineLayerStyle": {
+      "status": "unaudited"
+    },
+    "PolylineProps": {
+      "status": "unaudited"
+    },
+    "Prism": {
+      "status": "unaudited"
+    },
+    "PrismProps": {
+      "status": "unaudited"
+    },
+    "PublicBMapClient": {
+      "status": "unaudited"
+    },
+    "PublicMapContext": {
+      "status": "unaudited"
+    },
+    "RasterTileLayer": {
+      "status": "unaudited"
+    },
+    "Rectangle": {
+      "status": "unaudited"
+    },
+    "RectangleProps": {
+      "status": "unaudited"
+    },
+    "ResolvedMapEvent": {
+      "status": "unaudited"
+    },
+    "ResourceScope": {
+      "status": "unaudited"
+    },
+    "ResourceScopeOptions": {
+      "status": "unaudited"
+    },
+    "ReverseGeocodeRequest": {
+      "status": "unaudited"
+    },
+    "RidingRouteOptions": {
+      "status": "unaudited"
+    },
+    "RidingRouteResult": {
+      "status": "unaudited"
+    },
+    "RouteDriveSegmentDTO": {
+      "status": "unaudited"
+    },
+    "RouteEndpoint": {
+      "status": "unaudited"
+    },
+    "RouteEndpointInfo": {
+      "status": "unaudited"
+    },
+    "RouteEndpointPoi": {
+      "status": "unaudited"
+    },
+    "RouteLeg": {
+      "status": "unaudited"
+    },
+    "RoutePlan": {
+      "status": "unaudited"
+    },
+    "RoutePlanDTO": {
+      "status": "unaudited"
+    },
+    "RoutePlanDrivingOptionsDTO": {
+      "status": "unaudited"
+    },
+    "RoutePlanDrivingPolicy": {
+      "status": "unaudited"
+    },
+    "RoutePlanEndpointInput": {
+      "status": "unaudited"
+    },
+    "RoutePlanExpose": {
+      "status": "unaudited"
+    },
+    "RoutePlanMode": {
+      "status": "unaudited"
+    },
+    "RoutePlanNavClickDTO": {
+      "status": "unaudited"
+    },
+    "RoutePlanPlanSelectDTO": {
+      "status": "unaudited"
+    },
+    "RoutePlanProps": {
+      "status": "unaudited"
+    },
+    "RoutePlanResultDTO": {
+      "status": "unaudited"
+    },
+    "RoutePlanSearchOptionsDTO": {
+      "status": "unaudited"
+    },
+    "RoutePlanTypeChangeDTO": {
+      "status": "unaudited"
+    },
+    "RoutePointDTO": {
+      "status": "unaudited"
+    },
+    "RouteRenderOptions": {
+      "status": "unaudited"
+    },
+    "RouteRenderState": {
+      "status": "unaudited"
+    },
+    "RouteRequest": {
+      "status": "unaudited"
+    },
+    "RouteResult": {
+      "status": "unaudited"
+    },
+    "RouteRidingSegmentDTO": {
+      "status": "unaudited"
+    },
+    "RouteSegmentBaseDTO": {
+      "status": "unaudited"
+    },
+    "RouteSegmentDTO": {
+      "status": "unaudited"
+    },
+    "RouteSegmentType": {
+      "status": "unaudited"
+    },
+    "RouteServiceHandle": {
+      "status": "unaudited"
+    },
+    "RouteServiceKind": {
+      "status": "unaudited"
+    },
+    "RouteState": {
+      "status": "unaudited"
+    },
+    "RouteStep": {
+      "status": "unaudited"
+    },
+    "RouteTaxiFare": {
+      "status": "unaudited"
+    },
+    "RouteTaxiFareDetail": {
+      "status": "unaudited"
+    },
+    "RouteTransitSegmentDTO": {
+      "status": "unaudited"
+    },
+    "RouteTransitSubType": {
+      "status": "unaudited"
+    },
+    "RouteWalkSegmentDTO": {
+      "status": "unaudited"
+    },
+    "ScaleControl": {
+      "status": "unaudited"
+    },
+    "SdkHandle": {
+      "status": "unaudited"
+    },
+    "SdkResourceSpec": {
+      "status": "unaudited"
+    },
+    "SdkResourceStatus": {
+      "status": "unaudited"
+    },
+    "ServiceCall": {
+      "status": "unaudited"
+    },
+    "ServiceCallStatus": {
+      "status": "unaudited"
+    },
+    "ServiceDriver": {
+      "status": "unaudited"
+    },
+    "ServiceErrorInfo": {
+      "status": "unaudited"
+    },
+    "ServiceHandle": {
+      "status": "unaudited"
+    },
+    "ServiceInvocationDriver": {
+      "status": "unaudited"
+    },
+    "ServiceResult": {
+      "status": "unaudited"
+    },
+    "SetZoomOptions": {
+      "status": "unaudited"
+    },
+    "Size": {
+      "status": "unaudited"
+    },
+    "SizeLike": {
+      "status": "unaudited"
+    },
+    "StyleExpression": {
+      "status": "unaudited"
+    },
+    "TargetContext": {
+      "status": "unaudited"
+    },
+    "TargetKind": {
+      "status": "unaudited"
+    },
+    "TextLayer": {
+      "status": "unaudited"
+    },
+    "TextLayerAnchor": {
+      "status": "unaudited"
+    },
+    "TextLayerPick": {
+      "status": "unaudited"
+    },
+    "TextLayerProps": {
+      "status": "unaudited"
+    },
+    "TextLayerStyle": {
+      "status": "unaudited"
+    },
+    "TileLayer": {
+      "status": "unaudited"
+    },
+    "TrackLineLayer": {
+      "status": "unaudited"
+    },
+    "TrackLineLayerExpose": {
+      "status": "unaudited"
+    },
+    "TrackLineLayerProps": {
+      "status": "unaudited"
+    },
+    "TrackLineObserved": {
+      "status": "unaudited"
+    },
+    "TrafficLayer": {
+      "status": "unaudited"
+    },
+    "TransitLineSegment": {
+      "status": "unaudited"
+    },
+    "TransitPolicy": {
+      "status": "unaudited"
+    },
+    "TransitRouteOptions": {
+      "status": "unaudited"
+    },
+    "TransitRoutePlan": {
+      "status": "unaudited"
+    },
+    "TransitRouteRequest": {
+      "status": "unaudited"
+    },
+    "TransitRouteResult": {
+      "status": "unaudited"
+    },
+    "TransitRouteSegment": {
+      "status": "unaudited"
+    },
+    "TransitVehiclePolicy": {
+      "status": "unaudited"
+    },
+    "TransitWalkSegment": {
+      "status": "unaudited"
+    },
+    "UI_KIT_PACKAGE": {
+      "status": "unaudited"
+    },
+    "UI_KIT_STYLE_PATH": {
+      "status": "unaudited"
+    },
+    "UiKitAutocompleteWidget": {
+      "status": "unaudited"
+    },
+    "UiKitModule": {
+      "status": "unaudited"
+    },
+    "UiKitPlaceDetailWidget": {
+      "status": "unaudited"
+    },
+    "UiKitRoutePlanWidget": {
+      "status": "unaudited"
+    },
+    "UiKitSearchWidget": {
+      "status": "unaudited"
+    },
+    "UiKitSubscription": {
+      "status": "unaudited"
+    },
+    "UiKitWidgetHandle": {
+      "status": "unaudited"
+    },
+    "UiKitWidgetOptions": {
+      "status": "unaudited"
+    },
+    "UiKitWidgetStatus": {
+      "status": "unaudited"
+    },
+    "UnsupportedBehavior": {
+      "status": "unaudited"
+    },
+    "UnsupportedCapabilityError": {
+      "status": "unaudited"
+    },
+    "UseControllableStateOptions": {
+      "status": "unaudited"
+    },
+    "UseMapEventOptions": {
+      "status": "unaudited"
+    },
+    "UseMapStatusOptions": {
+      "status": "unaudited"
+    },
+    "UseOverlaySpecOptions": {
+      "status": "unaudited"
+    },
+    "UseOverlaySpecResult": {
+      "status": "unaudited"
+    },
+    "UseUiKitWidgetOptions": {
+      "status": "unaudited"
+    },
+    "UseUiKitWidgetResult": {
+      "status": "unaudited"
+    },
+    "UseViewAnimationOptions": {
+      "status": "unaudited"
+    },
+    "UseViewAnimationReturn": {
+      "status": "unaudited"
+    },
+    "ViewAnimationCancelOutcome": {
+      "status": "unaudited"
+    },
+    "ViewAnimationKeyFrames": {
+      "status": "unaudited"
+    },
+    "ViewAnimationStatus": {
+      "status": "unaudited"
+    },
+    "ViewCommandOptions": {
+      "status": "unaudited"
+    },
+    "Viewport": {
+      "status": "unaudited"
+    },
+    "ViewportOptions": {
+      "status": "unaudited"
+    },
+    "VisualizationLayerCommonProps": {
+      "status": "unaudited"
+    },
+    "VisualizationPickOptions": {
+      "status": "unaudited"
+    },
+    "VisualizationStyleValue": {
+      "status": "unaudited"
+    },
+    "VisualizationZoomCtorOptions": {
+      "status": "unaudited"
+    },
+    "WMSLayer": {
+      "status": "unaudited"
+    },
+    "WMTSLayer": {
+      "status": "unaudited"
+    },
+    "WalkingRouteOptions": {
+      "status": "unaudited"
+    },
+    "WalkingRouteResult": {
+      "status": "unaudited"
+    },
+    "XYLike": {
+      "status": "unaudited"
+    },
+    "XYZLayer": {
+      "status": "unaudited"
+    },
+    "ZoomControl": {
+      "status": "unaudited"
+    },
+    "assertLoadedSdk": {
+      "status": "unaudited"
+    },
+    "baiduJsapiV4Provider": {
+      "status": "unaudited"
+    },
+    "bmapClientContextKey": {
+      "status": "unaudited"
+    },
+    "bmapConfigKey": {
+      "status": "unaudited"
+    },
+    "createBMapClient": {
+      "status": "unaudited"
+    },
+    "createBMapClientDefinition": {
+      "status": "unaudited"
+    },
+    "createBMapPlugin": {
+      "status": "unaudited"
+    },
+    "createCapabilityRegistry": {
+      "status": "unaudited"
+    },
+    "createClientContext": {
+      "status": "unaudited"
+    },
+    "createHandle": {
+      "status": "unaudited"
+    },
+    "createJsapiV4Driver": {
+      "status": "unaudited"
+    },
+    "createLoadedJsapiV4": {
+      "status": "unaudited"
+    },
+    "createPluginHost": {
+      "status": "unaudited"
+    },
+    "customScriptV4Provider": {
+      "status": "unaudited"
+    },
+    "defaultClientDefinitionKey": {
+      "status": "unaudited"
+    },
+    "disposeDefaultPluginHost": {
+      "status": "unaudited"
+    },
+    "drawingManagerPlugin": {
+      "status": "unaudited"
+    },
+    "dynamicEmit": {
+      "status": "unaudited"
+    },
+    "existingGlobalV4Provider": {
+      "status": "unaudited"
+    },
+    "geoUtilsPlugin": {
+      "status": "unaudited"
+    },
+    "getDefaultPluginHost": {
+      "status": "unaudited"
+    },
+    "isLoadedSdk": {
+      "status": "unaudited"
+    },
+    "isPointLike": {
+      "status": "unaudited"
+    },
+    "isUiKitLoaded": {
+      "status": "unaudited"
+    },
+    "jsapiV4DriverFactory": {
+      "status": "unaudited"
+    },
+    "loadUiKit": {
+      "status": "unaudited"
+    },
+    "mapVglPlugin": {
+      "status": "unaudited"
+    },
+    "mvtFeatureStateKey": {
+      "status": "unaudited"
+    },
+    "normalizeEventKey": {
+      "status": "unaudited"
+    },
+    "normalizeMapMouseEvent": {
+      "status": "unaudited"
+    },
+    "normalizeProvider": {
+      "status": "unaudited"
+    },
+    "overlayEventOf": {
+      "status": "unaudited"
+    },
+    "overlayEventsOf": {
+      "status": "unaudited"
+    },
+    "overlayPointerFallback": {
+      "status": "unaudited"
+    },
+    "resolveMapContext": {
+      "status": "unaudited"
+    },
+    "resolveMapEventName": {
+      "status": "unaudited"
+    },
+    "resolvePluginDefinition": {
+      "status": "unaudited"
+    },
+    "stringToPluginDefinitions": {
+      "status": "unaudited"
+    },
+    "targetContextKey": {
+      "status": "unaudited"
+    },
+    "toPlainPoint": {
+      "status": "unaudited"
+    },
+    "toPlainPoints": {
+      "status": "unaudited"
+    },
+    "toPoint": {
+      "status": "unaudited"
+    },
+    "toSdkEventName": {
+      "status": "unaudited"
+    },
+    "toVueEventName": {
+      "status": "unaudited"
+    },
+    "trackAnimationPlugin": {
+      "status": "unaudited"
+    },
+    "unwrapRaw": {
+      "status": "unaudited"
+    },
+    "urlPluginDefinition": {
+      "status": "unaudited"
+    },
+    "useAreaBoundary": {
+      "status": "fixed",
+      "note": "#211 `85720cc`：补上官方 Boundary#parsebdStr 出口"
+    },
+    "useControllableState": {
+      "status": "unaudited"
+    },
+    "useConvertor": {
+      "status": "unaudited"
+    },
+    "useDrivingRoute": {
+      "status": "unaudited"
+    },
+    "useGeocodeDetail": {
+      "status": "fixed",
+      "note": "#210 `d9304f5`：补上官方 LocationOptions（poiRadius / numPois）"
+    },
+    "useGeocoder": {
+      "status": "deferred",
+      "note": "官方 Geocoder ctor({language}) 无路径：涉共享实例的构造期归属，待裁决"
+    },
+    "useGeolocation": {
+      "status": "deferred",
+      "note": "官方 enable|disableSDKLocation 未暴露：简单档是否也需活实例通道，待裁决"
+    },
+    "useIpLocation": {
+      "status": "deferred",
+      "note": "官方 LocalCity#opts.renderOptions 未暴露：涉地图所有权，待裁决（审计表 MISSING）"
+    },
+    "useLocalSearch": {
+      "status": "fixed",
+      "note": "#212 `cf8efb9` + #214 `0157709`：补上官方同步成员、四个布尔开关与 withHandle 通道"
+    },
+    "useMap": {
+      "status": "unaudited"
+    },
+    "useMapContext": {
+      "status": "unaudited"
+    },
+    "useMapEvent": {
+      "status": "unaudited"
+    },
+    "useMapReady": {
+      "status": "unaudited"
+    },
+    "useMapStatus": {
+      "status": "unaudited"
+    },
+    "useMarkerIcons": {
+      "status": "unaudited"
+    },
+    "useOptionalClientContext": {
+      "status": "unaudited"
+    },
+    "useOverlaySpec": {
+      "status": "unaudited"
+    },
+    "usePanoramaService": {
+      "status": "unaudited"
+    },
+    "useParentOverlayHandle": {
+      "status": "unaudited"
+    },
+    "useRequiredClientContext": {
+      "status": "unaudited"
+    },
+    "useRidingRoute": {
+      "status": "unaudited"
+    },
+    "useSdkResource": {
+      "status": "unaudited"
+    },
+    "useTransitRoute": {
+      "status": "unaudited"
+    },
+    "useUiKitWidget": {
+      "status": "unaudited"
+    },
+    "useViewAnimation": {
+      "status": "unaudited"
+    },
+    "useWalkingRoute": {
+      "status": "unaudited"
+    }
+  }
+}

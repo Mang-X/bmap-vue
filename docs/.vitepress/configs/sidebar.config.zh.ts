@@ -456,6 +456,10 @@ export const sidebarConfigZh: DefaultTheme.Sidebar = {
           link: "165-audit-inventory",
         },
         {
+          text: "#165 收口：公共 API 覆盖记录",
+          link: "165-coverage",
+        },
+        {
           text: "JSAPI 4.0.5 对齐：B/C/D/F 成员审计",
           link: "165-audit-B-C-D-F",
         },

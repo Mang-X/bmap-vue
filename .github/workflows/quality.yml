@@ -208,6 +208,12 @@ jobs:
       - name: Check API report baselines
         run: pnpm check:api
 
+      # #165 收口门禁：发布面（7 个入口的公共导出）必须逐个有处置记录，且 `unaudited` 只降不升。
+      # 与上一道互补：check:api 管「形状没漂移」，本门禁管「没有名字被漏掉」。
+      # 输入是 `dist/**/*.d.ts`，同样排在 `build:package` 之后。
+      - name: Check #165 API coverage record
+        run: pnpm check:165-coverage
+
       # 单一执行入口：tests/behavior + packages/**（含 core/loader 的 Loader 测试），
       # 避免 CI 与本地 `pnpm test:unit` 的执行范围漂移。
       - name: Unit & behavior tests
