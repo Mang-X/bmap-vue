@@ -1175,6 +1175,25 @@ export interface JsapiV4ServiceDriver extends ServiceDriver, ServiceInvocationDr
   clearLocalSearchSelected(handle: ServiceHandle<"service:local-search">): void;
 
   /**
+   * 开启「检索结束后自动调整视野」（官方 `LocalSearch#enableAutoViewport()`）。
+   *
+   * **可选成员**：`JsapiV4ServiceDriver` 是公开导出面，给它增加必选成员会让既有自定义 Driver
+   * 仅升级一个 patch 就编译失败；而 `jsapiV4ServicesOf()` 只探测基础能力，缺成员时会在调用点
+   * 抛原生 `TypeError`（不是可读的领域错误）。不实现它的 Driver：composable 在调用前检测并显式
+   * 抛 `BMAP_CAPABILITY_UNSUPPORTED`（与 #212 的 `BMapDriver#isMapHandleLive?` 同一处置）。
+   */
+  enableLocalSearchAutoViewport?(handle: ServiceHandle<"service:local-search">): void;
+
+  /** 关闭自动调整视野（官方 `LocalSearch#disableAutoViewport()`）。可选成员，见上。 */
+  disableLocalSearchAutoViewport?(handle: ServiceHandle<"service:local-search">): void;
+
+  /** 开启「自动选中第一个结果」（官方 `LocalSearch#enableFirstResultSelection()`）。可选成员，见上。 */
+  enableLocalSearchFirstResultSelection?(handle: ServiceHandle<"service:local-search">): void;
+
+  /** 关闭自动选中第一个结果（官方 `LocalSearch#disableFirstResultSelection()`）。可选成员，见上。 */
+  disableLocalSearchFirstResultSelection?(handle: ServiceHandle<"service:local-search">): void;
+
+  /**
    * 设检索区域（官方 `LocalSearch#setLocation(location)`）。
    *
    * 与构造期的 `location` 同一套归一（城市名 / 领域 `Point` / 本库 `MapHandle` → raw）。

@@ -2217,6 +2217,10 @@ export function useLocalSearch(options?: MaybeRefOrGetter<BMapLocalSearchOptions
     getPageNum: () => number;
     clearSelected: () => void;
     setLocation: (location: LocalSearchLocation) => void;
+    enableAutoViewport: () => void;
+    disableAutoViewport: () => void;
+    enableFirstResultSelection: () => void;
+    disableFirstResultSelection: () => void;
     hasInstance: () => boolean;
     clear: () => void;
     cancel: () => void;

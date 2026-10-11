@@ -100,3 +100,22 @@
 - **P2 · `gotoPage` 绕过检查**：翻页属于**旧结果集**，不能重建后继续；现在同一复核对它**显式失败**
   （`cachedHandleInvalidMessage`），既不向绑定死地图的旧实例发请求，也不新建实例。
 - 两条都用**同步销毁**制造确定时序并做突变验证：去掉内核复核后 TOCTOU 与 `gotoPage` 两条都转红。
+
+### 追加：官方四个布尔开关（#165 MISSING 表）
+
+- `enableAutoViewport()` / `disableAutoViewport()` / `enableFirstResultSelection()` /
+  `disableFirstResultSelection()`：官方四个**同步**布尔开关，此前只能通过构造期
+  `renderOptions.autoViewport` / `renderOptions.selectFirstResult` 给。
+- 与分页设置同一套语义：作用在活实例上，并记进**运行期覆盖**（因此活过「取代在飞检索」的实例
+  重建），声明式选项变化时整份作废。
+- 补 4 条用例（开启活过重建 / 关闭压过声明式 true / 无实例时不创建 / 声明式变化作废覆盖），
+  突变实测：去掉覆盖合并即两条转红。
+
+### 追加项的第一轮评审修正（#214）
+
+- **P2 · 公开服务面新增必选成员**：四个开关改为**可选成员**；composable 在调用前检测，缺失时显式抛
+  `BMAP_CAPABILITY_UNSUPPORTED`（不再抛原生 `TypeError`）。与 #212 对 `isMapHandleLive` 的处置一致。
+- **P2 · 假绿测试**：上一版「声明式变化作废覆盖」用例只换了对象、字段值没变，`sameConstruction()`
+  直接跳过 ⇒ 删掉实现也照样通过。改为**真正改一个构造字段的值**，断言实例数增加 + 覆盖被清空。
+- **P3 · Fake 初始状态**：`autoViewport` / `firstResultSelection` 改为按构造选项初始化，并补
+  `true → false` 的**状态转移**断言（不再只看调用日志）。

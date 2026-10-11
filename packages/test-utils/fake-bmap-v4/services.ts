@@ -565,6 +565,17 @@ export class FakeV4LocalSearch {
     if (typeof options.pageNum === 'number' && Number.isInteger(options.pageNum) && options.pageNum >= 0) {
       this.currentPageNum = options.pageNum
     }
+    // 构造期 `renderOptions.autoViewport` / `selectFirstResult` 决定初始开关状态：
+    // 无条件从 false 起步会让「关闭压过声明式 true」这类断言失去意义（P3）。
+    const renderOptions = options.renderOptions as
+      | { autoViewport?: unknown; selectFirstResult?: unknown }
+      | undefined;
+    if (typeof renderOptions?.autoViewport === 'boolean') {
+      this.autoViewport = renderOptions.autoViewport
+    }
+    if (typeof renderOptions?.selectFirstResult === 'boolean') {
+      this.firstResultSelection = renderOptions.selectFirstResult
+    }
     // 构造期 `pageCapacity` 与 setter **共用同一份判据**（官方：越界/非整数重置为 10）。
     // 不归一化的话，重建时传入越界值会让 getPageCapacity() 与重建前矛盾。
     if (typeof options.pageCapacity === 'number') {
@@ -688,6 +699,30 @@ export class FakeV4LocalSearch {
     this.callLog.push('clearSelected')
   }
 
+  /** 官方 `LocalSearch#enableAutoViewport()`。 */
+  enableAutoViewport(): void {
+    this.callLog.push('enableAutoViewport')
+    this.autoViewport = true
+  }
+
+  /** 官方 `LocalSearch#disableAutoViewport()`。 */
+  disableAutoViewport(): void {
+    this.callLog.push('disableAutoViewport')
+    this.autoViewport = false
+  }
+
+  /** 官方 `LocalSearch#enableFirstResultSelection()`。 */
+  enableFirstResultSelection(): void {
+    this.callLog.push('enableFirstResultSelection')
+    this.firstResultSelection = true
+  }
+
+  /** 官方 `LocalSearch#disableFirstResultSelection()`。 */
+  disableFirstResultSelection(): void {
+    this.callLog.push('disableFirstResultSelection')
+    this.firstResultSelection = false
+  }
+
   /** 官方 `LocalSearch#setLocation(location)`：改检索区域（不重建实例）。 */
   setLocation(location: unknown): void {
     this.callLog.push('setLocation:' + String(location))
@@ -696,6 +731,10 @@ export class FakeV4LocalSearch {
 
   /** 测试辅助：最近一次 `setLocation` 收到的原始值 */
   currentLocation: unknown = undefined
+  /** 测试辅助：自动调整视野开关的当前值（`enable|disableAutoViewport` 共享状态） */
+  autoViewport = false
+  /** 测试辅助：自动选中首个结果开关的当前值 */
+  firstResultSelection = false
   /**
    * 测试辅助：当前页码（`setPageNum` / `getPageNum` 共享状态，与官方同步语义一致）。
    *
