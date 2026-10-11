@@ -16,8 +16,9 @@
 import { describe, expect, it } from "vitest";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { resolve, win32 } from "node:path";
 import {
+  augmentationNamesOf,
   coverageDrift,
   coverageKey,
   entryPointsFromManifest,
@@ -48,19 +49,68 @@ export declare enum E { A }
     ]);
   });
 
-  it("**`export default X` / `export namespace` 必须认出来**", () => {
-    expect(exportedNamesOf(`export default class Widget {}`)).toEqual(["Widget"]);
+  it("**`export default` 的公开名字是 `default`**（不是本地声明名）", () => {
+    // 消费者 import 的是 default，本地类名 `Widget` 不是公共名（上一版断言错了）
+    expect(exportedNamesOf(`export default class Widget {}`)).toEqual(["default"]);
+    expect(exportedNamesOf(`export default class {}`)).toEqual(["default"]);
+    expect(exportedNamesOf(`export default function () {}`)).toEqual(["default"]);
+    expect(exportedNamesOf(`declare const X: number; export default X;`)).toEqual(["default"]);
+    // `export = X` 是另一套语义（TS export-assignment）
+    expect(exportedNamesOf(`declare const Y: number; export = Y;`)).toEqual(["Y"]);
+  });
+
+  it("`export namespace NS` 必须认出来", () => {
     expect(exportedNamesOf(`export namespace NS { export const a = 1 }`)).toEqual(["NS"]);
   });
 
-  it("`export * from` **不**在本文件产生名字（由调用方展平）", () => {
-    expect(exportedNamesOf(`export * from "./other";\nexport { One } from "./one";`)).toEqual([
-      "One",
-    ]);
+  it("**`export * as NS` 要登记 `NS`**", () => {
+    expect(exportedNamesOf(`export * as NS from "./x";`)).toEqual(["NS"]);
+  });
+
+  it("**`export * from` 必须 fail-closed**（静默跳过就是给门禁开洞）", () => {
+    expect(() => exportedNamesOf(`export * from "./other";`)).toThrow(/不能枚举/);
+    // 同一文件里有名字导出也照样抛：不许「部分枚举 + 静默漏掉转出的」
+    expect(() => exportedNamesOf(`export { One } from "./one";\nexport * from "./other";`)).toThrow(
+      /不能枚举/,
+    );
   });
 
   it("非导出行不是公共面", () => {
     expect(exportedNamesOf(`declare function i(): void;\ninterface N {}\nconst x = 1;`)).toEqual([]);
+  });
+});
+
+describe("augmentationNamesOf：模块增强的成员级清单", () => {
+  it("**`declare module 'vue' { export interface GlobalComponents { … } }` 要列出成员**", () => {
+    const names = augmentationNamesOf(`
+declare module "vue" {
+  export interface GlobalComponents {
+    Map: typeof import("@mangax/bmap-vue")["Map"];
+    Marker: typeof import("@mangax/bmap-vue")["Marker"];
+  }
+}
+`);
+    expect(names).toContain("vue.GlobalComponents");
+    expect(names).toContain("vue.GlobalComponents.Map");
+    expect(names).toContain("vue.GlobalComponents.Marker");
+  });
+
+  it("顶层 `export {}` 的增强文件不再得到空集（上一版 `./volar` 就是零记录）", () => {
+    const source = `
+export {};
+declare module "@vue/runtime-core" {
+  export interface GlobalComponents { BMapProvider: unknown }
+}
+`;
+    expect(exportedNamesOf(source)).toEqual([]);
+    expect(augmentationNamesOf(source)).toContain("@vue/runtime-core.GlobalComponents.BMapProvider");
+  });
+
+  it("成员增删会改变清单（这就是门禁能知情的原因）", () => {
+    const withOne = augmentationNamesOf(`declare module "vue" { export interface G { A: 1 } }`);
+    const withTwo = augmentationNamesOf(`declare module "vue" { export interface G { A: 1; B: 2 } }`);
+    expect(withOne).not.toContain("vue.G.B");
+    expect(withTwo).toContain("vue.G.B");
   });
 });
 
@@ -92,6 +142,16 @@ describe("entryPointsFromManifest：新增子路径不能被静默漏检", () =>
     );
     expect(before).toHaveLength(1);
     expect(after.map((p) => p.entry)).toContain("./brand-new");
+  });
+
+  it("**Windows 路径**：`./volar` 解析到包根而不是 `dist\\` 下", () => {
+    const points = entryPointsFromManifest(
+      { exports: { "./volar": { types: "./volar.d.ts" } } },
+      "C:\\repo\\packages\\bmap-vue\\dist",
+      { pathApi: win32 },
+    );
+    expect(points[0]?.dts).toBe(win32.resolve("C:\\repo\\packages\\bmap-vue", "./volar.d.ts"));
+    expect(points[0]?.dts).not.toContain("dist");
   });
 
   it("`includeDeclarationOnly: false` 时排除只有声明的入口", () => {

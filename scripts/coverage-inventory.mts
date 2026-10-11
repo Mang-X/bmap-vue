@@ -20,6 +20,7 @@
  *    `note`（「判定要有依据」的可执行版本）。
  */
 import { readFileSync } from "node:fs";
+import { dirname, resolve as resolvePath } from "node:path";
 import ts from "typescript";
 
 /** 处置状态。`unaudited` 是**唯一**允许存量存在的一档，其余四档都表示已经人工判过。 */
@@ -85,27 +86,95 @@ export function exportedNamesOf(source: string): string[] {
     const hasDefault = modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword) ?? false;
 
     if (ts.isExportDeclaration(statement)) {
-      if (statement.exportClause && ts.isNamedExports(statement.exportClause)) {
-        // `export { type Foo }`：`isTypeOnly` 在 element 上，公共名仍然是 `name`
+      if (!statement.exportClause) {
+        // `export * from "./x"`：不解析模块就**无法**枚举它转出的名字。静默跳过等于给门禁开洞
+        // （实测确认这条分支一旦出现，新增公开符号不会形成 missing），因此 fail-closed。
+        const specifier = ts.isStringLiteral(statement.moduleSpecifier)
+          ? statement.moduleSpecifier.text
+          : "(未知模块)";
+        throw new Error(
+          `不能枚举 \`export * from "${specifier}"\`：` +
+            "需要解析目标模块才能列出转出的名字。请先展平该入口的声明（vite-plugin-dts 已这样做），" +
+            "或为本判据补上模块解析；静默跳过会让门禁漏检。",
+        );
+      }
+      if (ts.isNamedExports(statement.exportClause)) {
         for (const element of statement.exportClause.elements) add(element.name.text);
+      } else if (ts.isNamespaceExport(statement.exportClause)) {
+        // `export * as NS from "./x"`：公开名字就是 `NS`
+        add(statement.exportClause.name.text);
       }
       continue;
     }
     if (ts.isExportAssignment(statement)) {
-      if (ts.isIdentifier(statement.expression)) add(statement.expression.text);
+      // `export default X` 的**公开名字是 `default`**（消费者 import 的就是它），
+      // 不是本地声明名 `X`；`export = X` 按 TS export-assignment 语义登记 `X`。
+      if (statement.isExportEquals) {
+        if (ts.isIdentifier(statement.expression)) add(statement.expression.text);
+      } else {
+        add("default");
+      }
       continue;
     }
-    if (!hasExport && !hasDefault) continue;
-    // `export declare const K` 在 AST 里是 **FirstStatement**（`VariableStatement`），
-    // 名字在 `declarationList` 的每个 `VariableDeclaration` 上，不在语句本身（实测）。
+    if (hasDefault) {
+      // `export default class/function [Name] {}` 的公开名字同样是 `default`
+      add("default");
+      continue;
+    }
+    if (!hasExport) continue;
     if (ts.isVariableStatement(statement)) {
       for (const declaration of statement.declarationList.declarations) {
         if (ts.isIdentifier(declaration.name)) add(declaration.name.text);
       }
       continue;
     }
-    // export [default] class/function/interface/type/enum/namespace
     add((statement as { name?: ts.Identifier }).name?.text);
+  }
+  return [...names].sort();
+}
+
+/**
+ * 模块增强（`declare module 'vue' { export interface GlobalComponents { … } }`）里的公共名。
+ *
+ * 为什么需要它（#215 第二轮评审 P1）：`./volar` 入口的 `volar.d.ts` **顶层只有增强**，
+ * `exportedNamesOf` 对它得到空集 —— 于是「8 个入口」里有一个实际上**零记录**，
+ * 改这个真正面向消费者的全局类型增强不会让门禁知情。
+ *
+ * 粒度取**成员级**：键形如 `vue.GlobalComponents.Map`，名字变化/成员增删都会形成 missing/stale。
+ */
+export function augmentationNamesOf(source: string): string[] {
+  const file = ts.createSourceFile("d.ts", source, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS);
+  const names = new Set<string>();
+  const moduleNameOf = (node: ts.ModuleDeclaration): string | undefined => {
+    const name = node.name;
+    if (ts.isStringLiteral(name)) return name.text;
+    if (ts.isIdentifier(name)) return name.text;
+    return undefined;
+  };
+  for (const statement of file.statements) {
+    if (!ts.isModuleDeclaration(statement)) continue;
+    const moduleName = moduleNameOf(statement);
+    if (!moduleName) continue;
+    const body = statement.body;
+    if (!body || !ts.isModuleBlock(body)) continue;
+    for (const inner of body.statements) {
+      if (!ts.isInterfaceDeclaration(inner) && !ts.isTypeAliasDeclaration(inner)) continue;
+      const interfaceName = inner.name.text;
+      names.add(`${moduleName}.${interfaceName}`);
+      if (ts.isInterfaceDeclaration(inner)) {
+        for (const member of inner.members) {
+          const memberName = (member as { name?: ts.Node }).name;
+          if (!memberName) continue;
+          // 不能对任意节点用 `getText()`：这里建的 AST 没挂 parent/sourceFile，会抛
+          // 「Cannot read properties of undefined」。字符串/标识符的 `.text` 就够用。
+          const text =
+            ts.isIdentifier(memberName) || ts.isStringLiteral(memberName)
+              ? memberName.text
+              : undefined;
+          if (text) names.add(`${moduleName}.${interfaceName}.${text}`);
+        }
+      }
+    }
   }
   return [...names].sort();
 }
@@ -125,9 +194,14 @@ export interface CoverageEntryPoint {
 export function entryPointsFromManifest(
   pkg: { exports?: Record<string, unknown> },
   distRoot: string,
-  options: { includeDeclarationOnly?: boolean } = {},
+  options: {
+    includeDeclarationOnly?: boolean;
+    /** 注入 path 实现：测试用 `path.win32` 验证跨平台解析（默认平台 path）。 */
+    pathApi?: { dirname: (p: string) => string; resolve: (...p: string[]) => string };
+  } = {},
 ): CoverageEntryPoint[] {
   const includeDeclarationOnly = options.includeDeclarationOnly ?? true;
+  const pathApi = options.pathApi ?? { dirname, resolve: resolvePath };
   const points: CoverageEntryPoint[] = [];
   for (const [entry, value] of Object.entries(pkg.exports ?? {})) {
     if (entry === "./styles.css" || entry === "./package.json") continue;
@@ -135,21 +209,12 @@ export function entryPointsFromManifest(
     const types = record?.types;
     if (typeof types !== "string") continue;
     if (!includeDeclarationOnly && !("import" in (record ?? {}))) continue;
-    points.push({ entry, dts: resolveUnder(distRoot, types) });
+    // `types` 可以是 `./dist/x.d.ts`（构建产物），也可以是 `./volar.d.ts`（包根的生成声明）——
+    // 都以**包根**为基准。用 `dirname` 而不是替换末尾 `/dist`：Windows 上是 `\dist`，
+    // 正则匹配不到（评审 P2，已有 win32 用例）。
+    points.push({ entry, dts: pathApi.resolve(pathApi.dirname(distRoot), types) });
   }
   return points.sort((a, b) => a.entry.localeCompare(b.entry));
-}
-
-/**
- * 解析 `exports` 里 `types` 指向的文件。
- *
- * `types` 可以是 `./dist/x.d.ts`（构建产物），也可以是 `./volar.d.ts`（包根下的手写声明，
- * `./volar` 入口就是后者）—— 两者都以**包根**为基准，不能无条件拼到 `dist/` 下。
- */
-function resolveUnder(distRoot: string, types: string): string {
-  const pkgRoot = distRoot.replace(/\/dist\/?$/, "");
-  const relative = types.replace(/^\.\//, "");
-  return `${relative.startsWith("dist/") ? distRoot.replace(/\/$/, "") : pkgRoot}/${relative.replace(/^dist\//, "")}`;
 }
 
 /** 逐个入口枚举导出名。返回 `{ entry -> names }`，名字已排序。 */
@@ -158,7 +223,19 @@ export function inventoryOf(
 ): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   for (const point of entryPoints) {
-    out[point.entry] = exportedNamesOf(readFileSync(point.dts, "utf8"));
+    let source: string;
+    try {
+      source = readFileSync(point.dts, "utf8");
+    } catch {
+      throw new Error(
+        `读不到入口 ${point.entry} 的声明文件：${point.dts}\n` +
+          "  干净 checkout 下 `packages/bmap-vue/volar.d.ts` 是**生成物**（gitignore）：" +
+          "先跑 `pnpm generate:manifest:check`（或 `pnpm pack:package`）再跑本命令。",
+      );
+    }
+    const names = new Set<string>(exportedNamesOf(source));
+    for (const name of augmentationNamesOf(source)) names.add(name);
+    out[point.entry] = [...names].sort();
   }
   return out;
 }

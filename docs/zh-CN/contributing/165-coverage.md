@@ -17,7 +17,7 @@
 | **记录** | `docs/zh-CN/contributing/165-coverage.json`，键是 **`入口#名字`** | 人工判定，生成器**保留**已有结论 |
 | **判据** | ①清单与记录**一一对应** ②`unaudited` **只许下降**（含**跨提交**比较）③已判定项必须有非空 `note` | `pnpm check:165-coverage` |
 
-入口取自 `packages/bmap-vue/package.json#exports` 里带 `types` 的 7 个子路径：
+入口取自 `packages/bmap-vue/package.json#exports` 里带 `types` 的 **8** 个子路径：
 `.` / `./components` / `./composables` / `./plugins` / `./resolver` / `./advanced` / `./ui-kit`。
 
 ## 五档处置
@@ -33,10 +33,15 @@
 ## 命令
 
 ```bash
+pnpm generate:manifest:check  # 生成包根的 volar.d.ts（gitignore 的生成物，./volar 入口读它）
 pnpm build:package            # 清单来自 dist，必须先构建
 pnpm generate:165-coverage    # 写记录：保留已有结论、新名字落 unaudited、移除已消失的名字
-pnpm check:165-coverage       # 门禁：一一对应 + unaudited 不超基线
+pnpm check:165-coverage       # 门禁：一一对应 + unaudited 不超基线（跨提交比较见下）
 ```
+
+> `pnpm build:package` **不会**生成包根的 `volar.d.ts`（它是 gitignore 的生成物，只由
+> `generate:manifest*` 写）。干净 checkout 下漏掉第一步会以「读不到入口 ./volar 的声明文件」
+> 报错并提示该命令 —— 错误信息里写了补救步骤。
 
 判定某个名字后，直接编辑 `165-coverage.json` 把它的 `status` 从 `unaudited` 改成四档之一并写 `note`，
 然后重跑 `generate:165-coverage`（它会下调基线）。**基线只降不升**：如果门禁报「未核对数上涨」，

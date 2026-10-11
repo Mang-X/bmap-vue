@@ -71,10 +71,10 @@ writeFileSync(
     {
       baseline: {
         unaudited: baseline,
-        // 迁移声明是**一次性**的：写到已经重设过的记录上就失去意义（check 脚本会拒绝重复使用）。
-        ...(baseline === previous.baseline.unaudited && previous.baseline.migration
-          ? { migration: previous.baseline.migration }
-          : {}),
+        // 迁移声明原样保留：**是否允许重复使用由 check 脚本判定**（base 版本里已有同一条声明
+        // 就拒绝再次抬高基线）。生成器只负责不把它擦掉 —— 擦掉会让一次合法迁移在下次生成时
+        // 变成「无声明上涨」，从而被自己的门禁拦下。
+        ...(previous.baseline.migration ? { migration: previous.baseline.migration } : {}),
       },
       entries,
     },

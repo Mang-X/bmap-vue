@@ -212,6 +212,11 @@ jobs:
       # 与上一道互补：check:api 管「形状没漂移」，本门禁管「没有名字被漏掉」。
       # 输入是 `dist/**/*.d.ts`，同样排在 `build:package` 之后。
       - name: 'Check #165 API coverage record'
+        # 跨提交「基线只降不升」需要真正的 base：PR 用 event.pull_request.base.sha，
+        # push 用 event.before。不注入的话脚本会退化为只比较文件内基线（可被一起改大绕过）。
+        env:
+          GITHUB_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GITHUB_BEFORE_SHA: ${{ github.event.before }}
         run: pnpm check:165-coverage
 
       # 单一执行入口：tests/behavior + packages/**（含 core/loader 的 Loader 测试），

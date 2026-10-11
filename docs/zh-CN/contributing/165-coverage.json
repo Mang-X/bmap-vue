@@ -1,7 +1,7 @@
 {
   "baseline": {
-    "unaudited": 1133,
-    "migration": "覆盖维度从「全局名字」改为「入口#名字」（#215 评审 P1）：同一名字出现在多个入口时必须逐个判定，因此计数天然变大。这是引入该维度时的一次性重设。"
+    "unaudited": 1246,
+    "migration": "覆盖维度从「全局名字」改为「入口#名字」，并把 ./volar 的 module augmentation 按成员级纳入清单（#215 第二轮评审 P1）。两者都让计数天然变大，属一次性维度变更。"
   },
   "entries": {
     ".#AreaBoundary": {
@@ -3473,6 +3473,349 @@
       "status": "unaudited"
     },
     "./ui-kit#useUiKitWidget": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Autocomplete": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.BMapProvider": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.BezierCurve": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Circle": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.CityListControl": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.ContextMenu": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.CopyrightControl": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.CustomControl": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.CustomOverlay": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.DOMLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.DistrictLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.FillLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.GeoJSONLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.GroundOverlay": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.GroundPoint": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.HeatmapLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.InfoWindow": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Label": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.LineLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.LocationControl": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.MVTLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Map": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.MapMask": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.MapTypeControl": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Marker": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Marker3D": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.MarkerCluster": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.MarkerList": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.MenuItem": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.MenuSeparator": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.NavigationControl": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.NavigationControl3D": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.OverviewMapControl": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Panorama": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.PanoramaControl": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.PanoramaCoverageLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.PanoramaLabel": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.PointCollection": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.PointIconLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.PointLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Polygon": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.PolygonLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Polyline": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.PolylineLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Prism": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.RasterTileLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Rectangle": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.ScaleControl": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.TextLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.TileLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.TrackLineLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.TrafficLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.WMSLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.WMTSLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.XYZLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.ZoomControl": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents": {
+      "status": "retained",
+      "note": "生成的全局组件增强；成员级清单由本记录覆盖（#215 第二轮评审 P1 后纳入）"
+    },
+    "./volar#vue.GlobalComponents.Autocomplete": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.BMapProvider": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.BezierCurve": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.Circle": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.CityListControl": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.ContextMenu": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.CopyrightControl": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.CustomControl": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.CustomOverlay": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.DOMLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.DistrictLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.FillLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.GeoJSONLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.GroundOverlay": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.GroundPoint": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.HeatmapLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.InfoWindow": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.Label": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.LineLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.LocationControl": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.MVTLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.Map": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.MapMask": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.MapTypeControl": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.Marker": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.Marker3D": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.MarkerCluster": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.MarkerList": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.MenuItem": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.MenuSeparator": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.NavigationControl": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.NavigationControl3D": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.OverviewMapControl": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.Panorama": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.PanoramaControl": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.PanoramaCoverageLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.PanoramaLabel": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.PointCollection": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.PointIconLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.PointLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.Polygon": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.PolygonLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.Polyline": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.PolylineLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.Prism": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.RasterTileLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.Rectangle": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.ScaleControl": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.TextLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.TileLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.TrackLineLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.TrafficLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.WMSLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.WMTSLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.XYZLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.ZoomControl": {
       "status": "unaudited"
     }
   }

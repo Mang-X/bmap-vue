@@ -39,24 +39,54 @@ const record = readCoverageRecord(recordFile);
 const { missing, stale } = coverageDrift(inventory, record);
 const counts = statusCounts(record);
 
-/** 取 base 版本的记录（`GITHUB_BASE_REF` 优先，其次 `origin/main`）。取不到返回 `undefined`。 */
-function baseRecord(): { record: CoverageRecord; source: string } | undefined {
-  const candidates = ["origin/main", process.env.GITHUB_BASE_SHA, process.env.GITHUB_BASE_REF]
-    .filter((ref): ref is string => typeof ref === "string" && ref.length > 0);
+/**
+ * 取 **base 版本**的记录。选源顺序刻意与 CI 触发场景对齐：
+ *
+ * - PR：`GITHUB_BASE_SHA`（workflow 显式注入 `github.event.pull_request.base.sha`）——
+ *   不能用 `origin/main`，否则对 `2.x` / `next` 的 PR 会与**错误的目标分支**比较；
+ * - PR 的次选：`origin/${GITHUB_BASE_REF}`（目标分支名）；
+ * - push：`GITHUB_BEFORE_SHA`（`github.event.before`），否则 `HEAD^`；push 到 main 时
+ *   `origin/main` 通常就是本次 HEAD，拿它比较自己永远发现不了上涨。
+ *
+ * 返回 `missing: "absent"` 表示「base 里还没有这份文件」（首次引入），与「取不到 ref」区分开：
+ * 前者是合法初态，后者是基础设施问题，不能混为一谈。
+ */
+function baseRecord():
+  | { kind: "found"; record: CoverageRecord; source: string }
+  | { kind: "absent"; source: string }
+  | { kind: "unavailable" } {
+  const candidates: string[] = [];
+  const baseSha = process.env.GITHUB_BASE_SHA;
+  const before = process.env.GITHUB_BEFORE_SHA;
+  const baseRef = process.env.GITHUB_BASE_REF;
+  if (baseSha) candidates.push(baseSha);
+  if (baseRef) candidates.push(`origin/${baseRef}`);
+  if (before && !/^0{40}$/.test(before)) candidates.push(before);
+  candidates.push("HEAD^");
+
   for (const ref of candidates) {
+    let text: string;
     try {
-      const text = execFileSync("git", ["show", `${ref}:${recordRel}`], {
+      text = execFileSync("git", ["show", `${ref}:${recordRel}`], {
         cwd: root,
         encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
+        stdio: ["ignore", "pipe", "pipe"],
       });
-      const parsed = JSON.parse(text) as CoverageRecord;
-      return { record: parsed, source: ref };
+    } catch (error) {
+      const message = String((error as { stderr?: unknown }).stderr ?? "");
+      // 文件在 base 里不存在 = 首次引入（合法初态），与「ref 取不到」区分开
+      if (/exists on disk, but not in|does not exist in|: did not match/.test(message)) {
+        return { kind: "absent", source: ref };
+      }
+      continue;
+    }
+    try {
+      return { kind: "found", record: JSON.parse(text) as CoverageRecord, source: ref };
     } catch {
       continue;
     }
   }
-  return undefined;
+  return { kind: "unavailable" };
 }
 
 const problems: string[] = [];
@@ -79,7 +109,22 @@ if (counts.unaudited > record.baseline.unaudited) {
 }
 
 const base = baseRecord();
-if (base) {
+if (base.kind === "unavailable") {
+  /**
+   * 取不到任何 base：**不退化成一比就过**（实测那样把基线改成 99999 仍会全绿）。
+   * 退化为「基线必须等于当前未核对数」，并打印比较口径。
+   */
+  if (record.baseline.unaudited !== counts.unaudited) {
+    problems.push(
+      `取不到 base 版本的记录（已尝试 GITHUB_BASE_SHA / origin/<base_ref> / GITHUB_BEFORE_SHA / HEAD^），` +
+        `且基线 ${record.baseline.unaudited} 与当前未核对数 ${counts.unaudited} 不一致：` +
+        `无法验证跨提交单调性时，只接受「基线 = 当前未核对数」这种已收口形态。`,
+    );
+  }
+  console.log("[165-coverage] 取不到 base 版本的记录：退化为「基线必须等于当前未核对数」的弱判据");
+} else if (base.kind === "absent") {
+  console.log(`[165-coverage] base（${base.source}）里还没有这份记录：按首次引入处理，只比较文件内基线`);
+} else {
   /**
    * 基线**允许**在显式迁移时上涨一次：`baseline.migration` 里记着「本次是哪一个维度的迁移」。
    * 迁移必须是**新出现**的（base 版本里没有这条记录），否则同一条迁移声明可以被反复用来
@@ -97,22 +142,6 @@ if (base) {
   } else if (raised) {
     console.log(`[165-coverage] 基线迁移：${migration}`);
   }
-} else {
-  /**
-   * 取不到 base（浅克隆 / 首次引入 / 本地未 fetch）时**不能退化成一比就过**：那正是
-   * 「手动把基线改大」的窗口（实测：只比文件内基线时，把基线改成 99999 仍然全绿）。
-   * 退化为「本次必须至少下降到当前未核对数」，并显式打印比较口径。
-   *
-   * 真基线由 CI 的 `origin/main` 提供；本地看不到时，这条弱判据仍能挡住「只改大基线而不改数据」。
-   */
-  if (record.baseline.unaudited !== counts.unaudited) {
-    problems.push(
-      `取不到 base 版本的记录，且基线 ${record.baseline.unaudited} 与当前未核对数 ${counts.unaudited} 不一致：` +
-        `无法验证跨提交单调性时，只接受「基线 = 当前未核对数」这种已收口形态。` +
-        `请先 \`git fetch origin main\` 再跑，以使用真基线比较。`,
-    );
-  }
-  console.log("[165-coverage] 取不到 base 版本的记录：退化为「基线必须等于当前未核对数」的弱判据");
 }
 
 console.log(
@@ -121,7 +150,7 @@ console.log(
 console.log(
   `[165-coverage] 未核对 ${counts.unaudited}/${record.baseline.unaudited}（上限）｜` +
     `fixed ${counts.fixed} / retained ${counts.retained} / n-a ${counts["not-applicable"]} / deferred ${counts.deferred}` +
-    (base ? `｜base(${base.source}) 基线 ${base.record.baseline.unaudited}` : ""),
+    (base.kind === "found" ? `｜base(${base.source}) 基线 ${base.record.baseline.unaudited}` : ""),
 );
 
 if (problems.length > 0) {
