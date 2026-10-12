@@ -1,7 +1,12 @@
 {
   "baseline": {
     "unaudited": 1246,
-    "migration": "覆盖维度从「全局名字」改为「入口#名字」，并把 ./volar 的 module augmentation 按成员级纳入清单（#215 第二轮评审 P1）。两者都让计数天然变大，属一次性维度变更。"
+    "migration": {
+      "reason": "覆盖维度从「全局名字」改为「入口#名字」，并把 ./volar 的 module augmentation 按成员级纳入清单（#215 第二轮评审 P1）。两者都让计数天然变大。",
+      "exemptNewKeyPrefixes": [
+        "./volar#"
+      ]
+    }
   },
   "entries": {
     ".#AreaBoundary": {

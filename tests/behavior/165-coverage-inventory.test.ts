@@ -23,8 +23,10 @@ import {
   coverageKey,
   entryPointsFromManifest,
   exportedNamesOf,
+  migrationIsFresh,
   readCoverageRecord,
   statusCounts,
+  unjudgedNewKeys,
   type CoverageRecord,
 } from "../../scripts/coverage-inventory.mts";
 
@@ -284,7 +286,7 @@ describe("baseline.migration：唯一允许基线上涨的出口", () => {
     return file;
   };
 
-  it("migration 必须是字符串（写清迁移原因）", () => {
+  it("migration 必须是 { reason } 对象（写清迁移原因）", () => {
     expect(() =>
       readCoverageRecord(
         write("badmin.json", {
@@ -292,21 +294,80 @@ describe("baseline.migration：唯一允许基线上涨的出口", () => {
           entries: {},
         }),
       ),
-    ).toThrow(/migration 必须是字符串/);
+    ).toThrow(/migration 必须是 \{ reason: string \}|exemptNewKeyPrefixes/);
   });
 
   it("带 migration 的记录能正常读出（check 脚本用它区分「合法迁移」与「偷偷抬高」）", () => {
     const file = write("ok.json", {
-      baseline: { unaudited: 10, migration: "维度从名字改为入口#名字" },
+      baseline: { unaudited: 10, migration: { reason: "维度从名字改为入口#名字", exemptNewKeyPrefixes: ["./volar#"] } },
       entries: { a: { status: "unaudited" } },
     });
     const record = readCoverageRecord(file);
     expect(record.baseline.unaudited).toBe(10);
-    expect(record.baseline.migration).toBe("维度从名字改为入口#名字");
+    expect(record.baseline.migration?.reason).toBe("维度从名字改为入口#名字");
+    expect(record.baseline.migration?.exemptNewKeyPrefixes).toEqual(["./volar#"]);
   });
 
   it("没有 migration 时读出来就没有该字段（不会凭空造一个）", () => {
     const file = write("plain.json", { baseline: { unaudited: 3 }, entries: {} });
     expect(readCoverageRecord(file).baseline.migration).toBeUndefined();
+  });
+});
+
+describe("unjudgedNewKeys：净额抵消不能绕过（第三轮评审 P1）", () => {
+  const ent = (status: "unaudited" | "retained", note?: string) =>
+    status === "unaudited" ? { status } : { status, note: note ?? "依据" };
+
+  it("**新增 1 个 unaudited + 判掉 1 个旧项（总数不变）必须被报出**", () => {
+    const base = { ".#Old": ent("unaudited"), ".#Keep": ent("unaudited") };
+    // 同一次提交：新增 .#New 未判定，同时把 .#Old 判成 retained —— 未核对总数仍是 1，但新符号没判
+    const current = { ".#Old": ent("retained"), ".#Keep": ent("unaudited"), ".#New": ent("unaudited") };
+    expect(unjudgedNewKeys(current, base)).toEqual([".#New"]);
+    // 净额比较看不出问题：两侧的 unaudited 都是 1
+    // 两侧的未核对**数量相同**（2 → 2），这正是净额比较看不出来的原因
+    expect(Object.values(current).filter((e) => e.status === "unaudited")).toHaveLength(2);
+    expect(Object.values(base).filter((e) => e.status === "unaudited")).toHaveLength(2);
+  });
+
+  it("**删除旧导出**换新增同样被报出", () => {
+    const base = { ".#Old": ent("unaudited"), ".#Keep": ent("unaudited") };
+    const current = { ".#Keep": ent("unaudited"), ".#New": ent("unaudited") };
+    expect(unjudgedNewKeys(current, base)).toEqual([".#New"]);
+  });
+
+  it("新键**已判定**时不报（这才是正确做法）", () => {
+    const base = { ".#Old": ent("unaudited") };
+    const current = { ".#Old": ent("unaudited"), ".#New": ent("retained") };
+    expect(unjudgedNewKeys(current, base)).toEqual([]);
+  });
+
+  it("新键命中迁移豁免前缀时不报（见下一条：豁免本身必须是新的）", () => {
+    const base = { ".#Old": ent("unaudited") };
+    const current = { ".#Old": ent("unaudited"), "./volar#vue.GlobalComponents": ent("unaudited") };
+    expect(unjudgedNewKeys(current, base, { exemptNewKeyPrefixes: ["./volar#"] })).toEqual([]);
+    // 不在豁免前缀下的新键仍然要判
+    const current2 = { ...current, ".#Other": ent("unaudited") };
+    expect(unjudgedNewKeys(current2, base, { exemptNewKeyPrefixes: ["./volar#"] })).toEqual([".#Other"]);
+  });
+
+  it("没有 base（首次引入）时不报", () => {
+    expect(unjudgedNewKeys({ ".#A": ent("unaudited") }, undefined)).toEqual([]);
+  });
+});
+
+describe("migrationIsFresh：按**内容**判新，允许连续迁移但拒绝重复使用", () => {
+  it("内容不同 ⇒ 新（连续两次不同迁移都可以声明）", () => {
+    expect(
+      migrationIsFresh({ reason: "第二次" }, { reason: "第一次" }),
+    ).toBe(true);
+  });
+
+  it("**内容相同 ⇒ 不新**（同一条声明不能反复用来豁免/抬高基线）", () => {
+    expect(migrationIsFresh({ reason: "同一条" }, { reason: "同一条" })).toBe(false);
+  });
+
+  it("current 没有 migration ⇒ 不新；base 没有而 current 有 ⇒ 新", () => {
+    expect(migrationIsFresh(undefined, undefined)).toBe(false);
+    expect(migrationIsFresh({ reason: "首次" }, undefined)).toBe(true);
   });
 });

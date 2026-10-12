@@ -21,8 +21,10 @@ import {
   coverageDrift,
   entryPointsFromManifest,
   inventoryOf,
+  migrationIsFresh,
   readCoverageRecord,
   statusCounts,
+  unjudgedNewKeys,
   type CoverageRecord,
 } from "./coverage-inventory.mts";
 
@@ -131,16 +133,34 @@ if (base.kind === "unavailable") {
    * 抬高基线 —— 那等于把判据变成可选的。
    */
   const migration = record.baseline.migration;
-  const baseHasMigration = base.record.baseline.migration !== undefined;
+  const migrationFresh = migrationIsFresh(migration, base.record.baseline.migration);
   const raised = record.baseline.unaudited > base.record.baseline.unaudited;
-  if (raised && !(migration !== undefined && migration.trim().length > 0 && !baseHasMigration)) {
+  if (raised && !migrationFresh) {
     problems.push(
       `基线从 ${base.record.baseline.unaudited}（${base.source}）涨到 ${record.baseline.unaudited}：` +
         `「只降不升」必须跨提交成立。确因**覆盖维度变更**需要重设时，须在 baseline.migration 里` +
-        `写明本次迁移（且该声明必须是新出现的——同一条不能反复用）。`,
+        `写明本次迁移（内容必须相对 base 是新的——同一条不能反复用）。`,
     );
   } else if (raised) {
-    console.log(`[165-coverage] 基线迁移：${migration}`);
+    console.log(`[165-coverage] 基线迁移：${migration?.reason}`);
+  }
+
+  /**
+   * **净额抵消**：(#215 第三轮评审 P1) 只比总数时，「新增 1 个未核对 + 判掉/删除 1 个旧的」
+   * 可以让总数不变而新符号从未被判定。这里逐个要求：本次新出现的键必须**已经判定**
+   * （非 `unaudited` 且带 note —— 后者由 readCoverageRecord 保证）。
+   */
+  // 只有**内容相对 base 是新的**迁移才给豁免；同一条声明重复用不给（否则它是万能后门）。
+  const undecided = unjudgedNewKeys(record.entries, base.record.entries, {
+    exemptNewKeyPrefixes: migrationFresh
+      ? (migration?.exemptNewKeyPrefixes ?? [""])
+      : [],
+  });
+  if (undecided.length > 0) {
+    problems.push(
+      `${undecided.length} 个**本次新增**的键仍是 unaudited（不允许用「判掉/删除旧项」抵消总数）：` +
+        `${undecided.slice(0, 10).join(", ")}${undecided.length > 10 ? " …" : ""}`,
+    );
   }
 }
 

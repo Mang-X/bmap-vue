@@ -55,7 +55,17 @@ export interface CoverageRecord {
    */
   readonly baseline: {
     readonly unaudited: number;
-    readonly migration?: string;
+    /**
+     * 覆盖**维度迁移**的声明。判「新」的依据是**内容**（与 base 里的对象不同才算新），
+     * 因此可以连续声明多次不同的迁移，但同一条不能反复用来豁免。
+     *
+     * `exemptNewKeyPrefixes` 限定这次迁移一次引入了哪些新键（前缀匹配）；
+     * 省略表示「本次迁移引入的全部新键」—— 只在真正整维重构时使用。
+     */
+    readonly migration?: {
+      readonly reason: string;
+      readonly exemptNewKeyPrefixes?: readonly string[];
+    };
   };
   /** `<entry>#<name>` → 处置。用入口限定，才能发现「同名后来新增到另一个入口」。 */
   readonly entries: Record<string, CoverageEntry>;
@@ -270,6 +280,43 @@ export function statusCounts(record: CoverageRecord): Record<CoverageStatus, num
 }
 
 /**
+ * **本次新增**且**尚未判定**的键。
+ *
+ * 只比较 `unaudited` 总数是不够的（#215 第三轮评审 P1）：生成器把每个新增键默认写成
+ * `unaudited`，于是「新增 1 个未核对 + 把 1 个旧的判成 retained/删除旧导出」可以**净额抵消**，
+ * 总数不变、`missing`/`stale` 为空、CI 照绿，而新符号从未被判定 —— 与「拒绝新增未核对项」
+ * 直接冲突。
+ *
+ * 因此：有 base 记录时，逐个检查「本次新出现、且仍是 `unaudited`」的键并全部报出。
+ * 唯一的例外是**新出现的 `baseline.migration`** —— 覆盖维度变更会让所有键一次性变成新键，
+ * 那是已声明的一次性迁移（且该声明不能重复使用）。
+ *
+ * 没有 base 记录（首次引入）时返回空：此时没有「上一版」可比。
+ */
+export function unjudgedNewKeys(
+  entries: CoverageRecord["entries"],
+  baseEntries: CoverageRecord["entries"] | undefined,
+  options: { exemptNewKeyPrefixes?: readonly string[] } = {},
+): string[] {
+  if (!baseEntries) return [];
+  const base = new Set(Object.keys(baseEntries));
+  const prefixes = options.exemptNewKeyPrefixes ?? [];
+  return Object.keys(entries)
+    .filter((key) => !base.has(key) && entries[key]?.status === "unaudited")
+    .filter((key) => !prefixes.some((prefix) => key.startsWith(prefix)))
+    .sort();
+}
+
+/** 迁移声明是否**相对 base 是新的**（按内容比较，而不是「有没有 migration」）。 */
+export function migrationIsFresh(
+  current: CoverageRecord["baseline"]["migration"],
+  baseMigration: CoverageRecord["baseline"]["migration"] | undefined,
+): boolean {
+  if (!current) return false;
+  return JSON.stringify(current) !== JSON.stringify(baseMigration ?? null);
+}
+
+/**
  * 读取并**完整校验**记录。任何形状问题都抛错（fail-closed）：
  * `baseline.unaudited` 必须是非负整数、`entries` 必须是普通对象、状态必须在枚举内、
  * 已判定项必须有非空 `note`。
@@ -292,8 +339,18 @@ export function readCoverageRecord(file: string): CoverageRecord {
   ) {
     throw new Error(`${file}: baseline.unaudited 必须是非负整数`);
   }
-  if (baseline.migration !== undefined && typeof baseline.migration !== "string") {
-    throw new Error(`${file}: baseline.migration 必须是字符串（写清迁移原因）`);
+  if (baseline.migration !== undefined) {
+    const migration = baseline.migration as { reason?: unknown; exemptNewKeyPrefixes?: unknown };
+    if (!migration || typeof migration !== "object" || typeof migration.reason !== "string" || migration.reason.trim().length === 0) {
+      throw new Error(`${file}: baseline.migration 必须是 { reason: string }（写清迁移原因）`);
+    }
+    if (
+      migration.exemptNewKeyPrefixes !== undefined &&
+      (!Array.isArray(migration.exemptNewKeyPrefixes) ||
+        migration.exemptNewKeyPrefixes.some((prefix) => typeof prefix !== "string"))
+    ) {
+      throw new Error(`${file}: baseline.migration.exemptNewKeyPrefixes 必须是字符串数组`);
+    }
   }
   const entries = parsed.entries as Record<string, unknown> | undefined;
   if (!entries || typeof entries !== "object" || Array.isArray(entries)) {
@@ -316,7 +373,9 @@ export function readCoverageRecord(file: string): CoverageRecord {
   return {
     baseline: {
       unaudited: baseline.unaudited,
-      ...(typeof baseline.migration === "string" ? { migration: baseline.migration } : {}),
+      ...(baseline.migration !== undefined
+        ? { migration: baseline.migration as NonNullable<CoverageRecord["baseline"]["migration"]> }
+        : {}),
     },
     entries: entries as CoverageRecord["entries"],
   };
