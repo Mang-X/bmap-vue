@@ -23,6 +23,7 @@ import {
   coverageKey,
   entryPointsFromManifest,
   exportedNamesOf,
+  invalidExemptKeys,
   migrationIsFresh,
   readCoverageRecord,
   statusCounts,
@@ -299,13 +300,16 @@ describe("baseline.migration：唯一允许基线上涨的出口", () => {
 
   it("带 migration 的记录能正常读出（check 脚本用它区分「合法迁移」与「偷偷抬高」）", () => {
     const file = write("ok.json", {
-      baseline: { unaudited: 10, migration: { reason: "维度从名字改为入口#名字", exemptNewKeyPrefixes: ["./volar#"] } },
+      baseline: {
+        unaudited: 10,
+        migration: { reason: "维度从名字改为入口#名字", exemptNewKeys: ["./volar#vue.GlobalComponents"] },
+      },
       entries: { a: { status: "unaudited" } },
     });
     const record = readCoverageRecord(file);
     expect(record.baseline.unaudited).toBe(10);
     expect(record.baseline.migration?.reason).toBe("维度从名字改为入口#名字");
-    expect(record.baseline.migration?.exemptNewKeyPrefixes).toEqual(["./volar#"]);
+    expect(record.baseline.migration?.exemptNewKeys).toEqual(["./volar#vue.GlobalComponents"]);
   });
 
   it("没有 migration 时读出来就没有该字段（不会凭空造一个）", () => {
@@ -341,13 +345,20 @@ describe("unjudgedNewKeys：净额抵消不能绕过（第三轮评审 P1）", (
     expect(unjudgedNewKeys(current, base)).toEqual([]);
   });
 
-  it("新键命中迁移豁免前缀时不报（见下一条：豁免本身必须是新的）", () => {
+  it("新键命中**精确**豁免清单时不报；不在清单里的仍然要判", () => {
     const base = { ".#Old": ent("unaudited") };
-    const current = { ".#Old": ent("unaudited"), "./volar#vue.GlobalComponents": ent("unaudited") };
-    expect(unjudgedNewKeys(current, base, { exemptNewKeyPrefixes: ["./volar#"] })).toEqual([]);
-    // 不在豁免前缀下的新键仍然要判
+    const exempt = "./volar#vue.GlobalComponents";
+    const current = { ".#Old": ent("unaudited"), [exempt]: ent("unaudited") };
+    expect(unjudgedNewKeys(current, base, { exemptNewKeys: [exempt] })).toEqual([]);
     const current2 = { ...current, ".#Other": ent("unaudited") };
-    expect(unjudgedNewKeys(current2, base, { exemptNewKeyPrefixes: ["./volar#"] })).toEqual([".#Other"]);
+    expect(unjudgedNewKeys(current2, base, { exemptNewKeys: [exempt] })).toEqual([".#Other"]);
+  });
+
+  it("**空串豁免不再匹配一切**（上一版 `?? ['']` 的后门）", () => {
+    const base = { ".#Old": ent("unaudited") };
+    const current = { ".#Old": ent("unaudited"), ".#BrandNew": ent("unaudited") };
+    // 传空串：精确匹配下不豁免任何键
+    expect(unjudgedNewKeys(current, base, { exemptNewKeys: [""] })).toEqual([".#BrandNew"]);
   });
 
   it("没有 base（首次引入）时不报", () => {
@@ -369,5 +380,53 @@ describe("migrationIsFresh：按**内容**判新，允许连续迁移但拒绝�
   it("current 没有 migration ⇒ 不新；base 没有而 current 有 ⇒ 新", () => {
     expect(migrationIsFresh(undefined, undefined)).toBe(false);
     expect(migrationIsFresh({ reason: "首次" }, undefined)).toBe(true);
+  });
+});
+
+describe("迁移豁免不能靠「改一个字」复用（第四轮评审 P1）", () => {
+  const ent = { status: "unaudited" as const };
+
+  it("**只改 migration.reason + 省略/清空豁免 + 新增未判定键 ⇒ 仍被报出**", () => {
+    const baseEntries = { ".#Old": ent };
+    // 攻击者：改一个字的 reason（内容自然「新」），但豁免清单为空
+    const currentEntries = { ".#Old": ent, ".#New": ent };
+    expect(migrationIsFresh({ reason: "补充说明" }, { reason: "原说明" })).toBe(true);
+    // 关键：reason 变「新」不再带来任何豁免 —— 豁免只能来自精确清单
+    expect(unjudgedNewKeys(currentEntries, baseEntries, { exemptNewKeys: [] })).toEqual([".#New"]);
+  });
+
+  it("**缺 `exemptNewKeys` 或空数组的记录一律被拒绝**（没有「缺省 = 全豁免」）", () => {
+    const dir = mkdtempSync(resolve(tmpdir(), "165-coverage-exempt-"));
+    const write = (name: string, value: unknown): string => {
+      const file = resolve(dir, name);
+      writeFileSync(file, JSON.stringify(value));
+      return file;
+    };
+    for (const migration of [
+      { reason: "缺清单" },
+      { reason: "空清单", exemptNewKeys: [] },
+      { reason: "含空串", exemptNewKeys: [""] },
+      { reason: "非数组", exemptNewKeys: "./volar#" },
+    ]) {
+      expect(() =>
+        readCoverageRecord(
+          write(`bad-${JSON.stringify(migration).length}.json`, {
+            baseline: { unaudited: 0, migration },
+            entries: {},
+          }),
+        ),
+      ).toThrow(/exemptNewKeys 必须是\*\*非空\*\*的字符串数组/);
+    }
+  });
+
+  it("**过期/抄错的豁免清单会被报出**（不是「没报问题」）", () => {
+    const baseEntries = { ".#Old": ent };
+    const entries = { ".#Old": ent, ".#New": { status: "retained" as const, note: "已判定" } };
+    // `.#New` 已判定、`.#Old` 在 base 里 —— 两者都不该出现在豁免清单里
+    expect(invalidExemptKeys([".#New", ".#Old", ".#Ghost"], entries, baseEntries)).toEqual([
+      ".#Ghost",
+      ".#New",
+      ".#Old",
+    ]);
   });
 });

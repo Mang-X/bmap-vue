@@ -18,7 +18,7 @@
 | **判据** | ①清单与记录**一一对应** ②`unaudited` **只许下降**（含**跨提交**比较）③已判定项必须有非空 `note` | `pnpm check:165-coverage` |
 
 入口取自 `packages/bmap-vue/package.json#exports` 里带 `types` 的 **8** 个子路径：
-`.` / `./components` / `./composables` / `./plugins` / `./resolver` / `./advanced` / `./ui-kit`。
+`.` / `./advanced` / `./components` / `./composables` / `./plugins` / `./resolver` / `./ui-kit` / `./volar`。
 
 ## 五档处置
 
@@ -52,7 +52,7 @@ pnpm check:165-coverage       # 门禁：一一对应 + unaudited 不超基线�
 | 项 | 值 |
 | --- | --- |
 | 入口 | 8 |
-| 记录键（`入口#名字`） | **1265**（另有 114 条来自 `./volar` 的模块增强） |
+| 记录键（`入口#名字`） | **1265**（其中 `./volar` 的模块增强 114 条） |
 | 已判定 | **19**（`fixed` 12 / `deferred` 6 / `retained` 1）——来自 #210 / #211 / #212 / #214 |
 | 未核对 | **1246**（基线，含一次性维度迁移声明） |
 

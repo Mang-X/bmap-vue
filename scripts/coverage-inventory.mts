@@ -59,12 +59,13 @@ export interface CoverageRecord {
      * 覆盖**维度迁移**的声明。判「新」的依据是**内容**（与 base 里的对象不同才算新），
      * 因此可以连续声明多次不同的迁移，但同一条不能反复用来豁免。
      *
-     * `exemptNewKeyPrefixes` 限定这次迁移一次引入了哪些新键（前缀匹配）；
-     * 省略表示「本次迁移引入的全部新键」—— 只在真正整维重构时使用。
+     * `exemptNewKeys` 是这次迁移**精确列出**的新键（必填、非空）。刻意**没有**「省略即全豁免」
+     * 之类的默认值：那会成为一个改一个字符就能无限复用的后门（第四轮评审 P1 实测形态）——
+     * 豁免只能是一份**有限、可见**的清单。
      */
     readonly migration?: {
       readonly reason: string;
-      readonly exemptNewKeyPrefixes?: readonly string[];
+      readonly exemptNewKeys: readonly string[];
     };
   };
   /** `<entry>#<name>` → 处置。用入口限定，才能发现「同名后来新增到另一个入口」。 */
@@ -296,14 +297,32 @@ export function statusCounts(record: CoverageRecord): Record<CoverageStatus, num
 export function unjudgedNewKeys(
   entries: CoverageRecord["entries"],
   baseEntries: CoverageRecord["entries"] | undefined,
-  options: { exemptNewKeyPrefixes?: readonly string[] } = {},
+  options: { exemptNewKeys?: readonly string[] } = {},
 ): string[] {
   if (!baseEntries) return [];
   const base = new Set(Object.keys(baseEntries));
-  const prefixes = options.exemptNewKeyPrefixes ?? [];
+  // **精确匹配**，不做前缀匹配、也不接受空串（空串会匹配一切，正是上一版的后门）。
+  const exempt = new Set(options.exemptNewKeys ?? []);
   return Object.keys(entries)
     .filter((key) => !base.has(key) && entries[key]?.status === "unaudited")
-    .filter((key) => !prefixes.some((prefix) => key.startsWith(prefix)))
+    .filter((key) => !exempt.has(key))
+    .sort();
+}
+
+/**
+ * 校验豁免清单本身是否**成立**：每一条都必须真的是「本次新增、且当前未判定」的键。
+ *
+ * 不这么做的话，一份过期的/抄来的/写错的清单会静默地不起作用（或反过来豁免掉不该豁免的键），
+ * 而调用方只会看到「没报问题」。
+ */
+export function invalidExemptKeys(
+  exemptNewKeys: readonly string[],
+  entries: CoverageRecord["entries"],
+  baseEntries: CoverageRecord["entries"],
+): string[] {
+  const base = new Set(Object.keys(baseEntries));
+  return exemptNewKeys
+    .filter((key) => base.has(key) || entries[key]?.status !== "unaudited")
     .sort();
 }
 
@@ -344,12 +363,16 @@ export function readCoverageRecord(file: string): CoverageRecord {
     if (!migration || typeof migration !== "object" || typeof migration.reason !== "string" || migration.reason.trim().length === 0) {
       throw new Error(`${file}: baseline.migration 必须是 { reason: string }（写清迁移原因）`);
     }
+    // 必填且非空：没有「默认全豁免」这条路（那会变成改一个字符就能复用的后门）。
     if (
-      migration.exemptNewKeyPrefixes !== undefined &&
-      (!Array.isArray(migration.exemptNewKeyPrefixes) ||
-        migration.exemptNewKeyPrefixes.some((prefix) => typeof prefix !== "string"))
+      !Array.isArray(migration.exemptNewKeys) ||
+      migration.exemptNewKeys.length === 0 ||
+      migration.exemptNewKeys.some((key) => typeof key !== "string" || key.length === 0)
     ) {
-      throw new Error(`${file}: baseline.migration.exemptNewKeyPrefixes 必须是字符串数组`);
+      throw new Error(
+        `${file}: baseline.migration.exemptNewKeys 必须是**非空**的字符串数组` +
+          `（精确列出本次迁移新增的键；不接受缺省或空串）`,
+      );
     }
   }
   const entries = parsed.entries as Record<string, unknown> | undefined;

@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import {
   coverageDrift,
   entryPointsFromManifest,
+  invalidExemptKeys,
   inventoryOf,
   migrationIsFresh,
   readCoverageRecord,
@@ -150,12 +151,21 @@ if (base.kind === "unavailable") {
    * 可以让总数不变而新符号从未被判定。这里逐个要求：本次新出现的键必须**已经判定**
    * （非 `unaudited` 且带 note —— 后者由 readCoverageRecord 保证）。
    */
-  // 只有**内容相对 base 是新的**迁移才给豁免；同一条声明重复用不给（否则它是万能后门）。
-  const undecided = unjudgedNewKeys(record.entries, base.record.entries, {
-    exemptNewKeyPrefixes: migrationFresh
-      ? (migration?.exemptNewKeyPrefixes ?? [""])
-      : [],
-  });
+  /**
+   * 只有**内容相对 base 是新的**迁移才给豁免；同一条声明重复用不给。
+   * 豁免是 migration 里**精确列出**的键，没有「缺省 = 全豁免」这条路（第四轮评审 P1）。
+   */
+  const exemptNewKeys = migrationFresh ? (migration?.exemptNewKeys ?? []) : [];
+  if (exemptNewKeys.length > 0) {
+    const invalid = invalidExemptKeys(exemptNewKeys, record.entries, base.record.entries);
+    if (invalid.length > 0) {
+      problems.push(
+        `${invalid.length} 条豁免声明指向的不是「本次新增且仍未判定」的键（清单过期或抄错）：` +
+          `${invalid.slice(0, 10).join(", ")}${invalid.length > 10 ? " …" : ""}`,
+      );
+    }
+  }
+  const undecided = unjudgedNewKeys(record.entries, base.record.entries, { exemptNewKeys });
   if (undecided.length > 0) {
     problems.push(
       `${undecided.length} 个**本次新增**的键仍是 unaudited（不允许用「判掉/删除旧项」抵消总数）：` +
