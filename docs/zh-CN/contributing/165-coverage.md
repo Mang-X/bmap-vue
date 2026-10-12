@@ -15,7 +15,7 @@
 | --- | --- | --- |
 | **清单** | 入口从 **`package.json#exports`** 派生（带 `types` 的子路径，含只有声明的 `./volar`）；导出名用 **TypeScript AST** 解析 | 发布面就是清单（固定列表会漏掉新增入口；正则会漏掉 `export { type T }`） |
 | **记录** | `docs/zh-CN/contributing/165-coverage.json`，键是 **`入口#名字`** | 人工判定，生成器**保留**已有结论 |
-| **判据** | ①清单与记录**一一对应** ②`unaudited` **只许下降**（含**跨提交**比较）③已判定项必须有非空 `note` | `pnpm check:165-coverage` |
+| **判据** | ①清单与记录**一一对应** ②`unaudited` **只许下降**（含**跨提交**比较）③已判定项必须有非空 `note` ④新增未判定项不可被抵消 ⑤已判定结论不可无痕回退 | `pnpm check:165-coverage` |
 
 入口取自 `packages/bmap-vue/package.json#exports` 里带 `types` 的 **8** 个子路径：
 `.` / `./advanced` / `./components` / `./composables` / `./plugins` / `./resolver` / `./ui-kit` / `./volar`。

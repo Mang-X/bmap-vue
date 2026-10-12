@@ -23,6 +23,7 @@ import {
   invalidExemptKeys,
   inventoryOf,
   migrationIsFresh,
+  regressedJudgedKeys,
   readCoverageRecord,
   statusCounts,
   unjudgedNewKeys,
@@ -166,6 +167,18 @@ if (base.kind === "unavailable") {
     }
   }
   const undecided = unjudgedNewKeys(record.entries, base.record.entries, { exemptNewKeys });
+  /**
+   * 已判定的结论不能无痕回退（第五轮评审 P1）：只比未核对总数时，
+   * 「A: fixed → unaudited」会被「B: unaudited → retained」净额抵消。
+   */
+  const regressed = regressedJudgedKeys(record.entries, base.record.entries);
+  if (regressed.length > 0) {
+    problems.push(
+      `${regressed.length} 个**已判定**的键被退回 unaudited（审计结论不能靠别处的进展冲抵；` +
+        `确需重新审计请显式说明并由评审放行）：` +
+        `${regressed.slice(0, 10).join(", ")}${regressed.length > 10 ? " …" : ""}`,
+    );
+  }
   if (undecided.length > 0) {
     problems.push(
       `${undecided.length} 个**本次新增**的键仍是 unaudited（不允许用「判掉/删除旧项」抵消总数）：` +

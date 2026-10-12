@@ -25,6 +25,7 @@ import {
   exportedNamesOf,
   invalidExemptKeys,
   migrationIsFresh,
+  regressedJudgedKeys,
   readCoverageRecord,
   statusCounts,
   unjudgedNewKeys,
@@ -428,5 +429,38 @@ describe("迁移豁免不能靠「改一个字」复用（第四轮评审 P1）"
       ".#New",
       ".#Old",
     ]);
+  });
+});
+
+describe("regressedJudgedKeys：已判定的结论不能无痕回退（第五轮评审 P1）", () => {
+  const fixed = { status: "fixed" as const, note: "证据" };
+  const un = { status: "unaudited" as const };
+  const retained = { status: "retained" as const, note: "依据" };
+
+  it("**`A: fixed → unaudited` + `B: unaudited → retained`（总数不变）必须报出 A**", () => {
+    const base = { ".#A": fixed, ".#B": un };
+    const current = { ".#A": un, ".#B": retained };
+    expect(regressedJudgedKeys(current, base)).toEqual([".#A"]);
+    // 净额比较看不出问题：两侧未核对都是 1
+    expect(Object.values(base).filter((e) => e.status === "unaudited")).toHaveLength(1);
+    expect(Object.values(current).filter((e) => e.status === "unaudited")).toHaveLength(1);
+    // 新键检查也看不出来：两个键都在 base 里
+    expect(unjudgedNewKeys(current, base)).toEqual([]);
+  });
+
+  it("正常推进（unaudited → 已判定）不报", () => {
+    const base = { ".#A": un, ".#B": un };
+    const current = { ".#A": fixed, ".#B": retained };
+    expect(regressedJudgedKeys(current, base)).toEqual([]);
+  });
+
+  it("已判定 → 另一种已判定（改判）不报：仍是已审状态，且 note 由校验强制非空", () => {
+    const base = { ".#A": fixed };
+    const current = { ".#A": retained };
+    expect(regressedJudgedKeys(current, base)).toEqual([]);
+  });
+
+  it("没有 base（首次引入）时不报", () => {
+    expect(regressedJudgedKeys({ ".#A": un }, undefined)).toEqual([]);
   });
 });

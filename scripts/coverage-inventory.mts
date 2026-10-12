@@ -310,6 +310,33 @@ export function unjudgedNewKeys(
 }
 
 /**
+ * **已判定的键被退回 `unaudited`**（审计结论回退）。
+ *
+ * 为什么单列一条判据（第五轮评审 P1）：`unjudgedNewKeys` 只看「本次**新出现**的键」，
+ * 不会比较同一个键的 `status` 变化。于是
+ * 「`A: fixed → unaudited` + `B: unaudited → retained`」总数相等、没有新键、
+ * `missing`/`stale` 为空、基线不涨 ⇒ 全绿，而 **A 那条带证据的审计结论已经被悄悄撤销**。
+ * 已判定的结论是**资产**，不能靠别处的进展冲抵。
+ *
+ * 确需重新审计时，做法是显式改回 `unaudited` 并在提交说明/评审里写明原因（这道门禁会红，
+ * 由人来放行）——而不是让它无痕通过。
+ */
+export function regressedJudgedKeys(
+  entries: CoverageRecord["entries"],
+  baseEntries: CoverageRecord["entries"] | undefined,
+): string[] {
+  if (!baseEntries) return [];
+  return Object.keys(entries)
+    .filter((key) => {
+      const before = baseEntries[key];
+      const after = entries[key];
+      if (!before || before.status === "unaudited") return false;
+      return after?.status === "unaudited";
+    })
+    .sort();
+}
+
+/**
  * 校验豁免清单本身是否**成立**：每一条都必须真的是「本次新增、且当前未判定」的键。
  *
  * 不这么做的话，一份过期的/抄来的/写错的清单会静默地不起作用（或反过来豁免掉不该豁免的键），
