@@ -4,3 +4,4 @@ public/**
 .vitepress/dist/**
 .vitepress/cache/**
 .vitepress/plugin-inventory.json
+zh-CN/contributing/165-coverage.json
