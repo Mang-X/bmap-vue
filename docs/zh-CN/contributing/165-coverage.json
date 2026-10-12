@@ -1,0 +1,3821 @@
+{
+  "baseline": {
+    "unaudited": 1246
+  },
+  "entries": {
+    ".#AreaBoundary": {
+      "status": "unaudited"
+    },
+    ".#Autocomplete": {
+      "status": "unaudited"
+    },
+    ".#AutocompleteOptions": {
+      "status": "unaudited"
+    },
+    ".#AutocompleteUpdateOptions": {
+      "status": "unaudited"
+    },
+    ".#BMAP_COMPONENT_EVENT_CATALOG": {
+      "status": "unaudited"
+    },
+    ".#BMapClient": {
+      "status": "unaudited"
+    },
+    ".#BMapClientContext": {
+      "status": "unaudited"
+    },
+    ".#BMapDriver": {
+      "status": "fixed",
+      "note": "#212 `cf8efb9`：新增可选成员 `isMapHandleLive?`"
+    },
+    ".#BMapDriverFactory": {
+      "status": "unaudited"
+    },
+    ".#BMapDriverInput": {
+      "status": "unaudited"
+    },
+    ".#BMapDrivingRouteOptions": {
+      "status": "unaudited"
+    },
+    ".#BMapEngine": {
+      "status": "unaudited"
+    },
+    ".#BMapGeoResult": {
+      "status": "unaudited"
+    },
+    ".#BMapGeolocationOptions": {
+      "status": "unaudited"
+    },
+    ".#BMapIpLocationResult": {
+      "status": "unaudited"
+    },
+    ".#BMapLocalSearchOperation": {
+      "status": "unaudited"
+    },
+    ".#BMapLocalSearchOptions": {
+      "status": "unaudited"
+    },
+    ".#BMapLocalSearchRenderOptions": {
+      "status": "unaudited"
+    },
+    ".#BMapPluginConfig": {
+      "status": "unaudited"
+    },
+    ".#BMapProvider": {
+      "status": "unaudited"
+    },
+    ".#BMapProviderLike": {
+      "status": "unaudited"
+    },
+    ".#BMapProviderProps": {
+      "status": "unaudited"
+    },
+    ".#BMapResolver": {
+      "status": "unaudited"
+    },
+    ".#BMapRidingRouteOptions": {
+      "status": "unaudited"
+    },
+    ".#BMapRouteLocation": {
+      "status": "unaudited"
+    },
+    ".#BMapRouteRenderOptions": {
+      "status": "unaudited"
+    },
+    ".#BMapServiceStatus": {
+      "status": "unaudited"
+    },
+    ".#BMapTransitRouteOptions": {
+      "status": "unaudited"
+    },
+    ".#BMapWalkingRouteOptions": {
+      "status": "unaudited"
+    },
+    ".#BUILTIN_PLUGIN_CATALOG": {
+      "status": "unaudited"
+    },
+    ".#BUILTIN_PLUGIN_NAMES": {
+      "status": "unaudited"
+    },
+    ".#BUILTIN_PLUGIN_URLS": {
+      "status": "unaudited"
+    },
+    ".#BezierCurve": {
+      "status": "unaudited"
+    },
+    ".#BezierCurveProps": {
+      "status": "unaudited"
+    },
+    ".#BoundaryParseRequest": {
+      "status": "fixed",
+      "note": "#211 `85720cc`：新增并导出该请求类型"
+    },
+    ".#BoundaryRings": {
+      "status": "unaudited"
+    },
+    ".#Bounds": {
+      "status": "unaudited"
+    },
+    ".#BuiltinMarkerIconName": {
+      "status": "unaudited"
+    },
+    ".#Capability": {
+      "status": "unaudited"
+    },
+    ".#CapabilityDescriptor": {
+      "status": "unaudited"
+    },
+    ".#CapabilityExplanation": {
+      "status": "unaudited"
+    },
+    ".#CapabilityFamily": {
+      "status": "unaudited"
+    },
+    ".#CapabilityReason": {
+      "status": "unaudited"
+    },
+    ".#CapabilityRegistry": {
+      "status": "unaudited"
+    },
+    ".#CapabilityStatus": {
+      "status": "unaudited"
+    },
+    ".#Circle": {
+      "status": "unaudited"
+    },
+    ".#CircleHandle": {
+      "status": "unaudited"
+    },
+    ".#CircleProps": {
+      "status": "unaudited"
+    },
+    ".#CircleReadBackApi": {
+      "status": "unaudited"
+    },
+    ".#CityListCommandApi": {
+      "status": "unaudited"
+    },
+    ".#CityListControl": {
+      "status": "unaudited"
+    },
+    ".#ClientStatus": {
+      "status": "unaudited"
+    },
+    ".#ClusterChange": {
+      "status": "unaudited"
+    },
+    ".#ClusterPick": {
+      "status": "unaudited"
+    },
+    ".#ClusterPointIconSource": {
+      "status": "unaudited"
+    },
+    ".#ContextMenu": {
+      "status": "unaudited"
+    },
+    ".#ContextMenuCommandApi": {
+      "status": "unaudited"
+    },
+    ".#ContextMenuExpose": {
+      "status": "unaudited"
+    },
+    ".#ContextMenuItem": {
+      "status": "unaudited"
+    },
+    ".#ContextMenuProps": {
+      "status": "unaudited"
+    },
+    ".#ContextMenuSelectPayload": {
+      "status": "unaudited"
+    },
+    ".#ContextMenuSeparator": {
+      "status": "unaudited"
+    },
+    ".#ControlCommandTypes": {
+      "status": "unaudited"
+    },
+    ".#ControlDriver": {
+      "status": "unaudited"
+    },
+    ".#ControlHandle": {
+      "status": "unaudited"
+    },
+    ".#ControlKind": {
+      "status": "unaudited"
+    },
+    ".#ControlOptionStatus": {
+      "status": "unaudited"
+    },
+    ".#ControlOptions": {
+      "status": "unaudited"
+    },
+    ".#ControllableMode": {
+      "status": "unaudited"
+    },
+    ".#ControllableState": {
+      "status": "unaudited"
+    },
+    ".#CoordinatesFromType": {
+      "status": "unaudited"
+    },
+    ".#CoordinatesToType": {
+      "status": "unaudited"
+    },
+    ".#CopyrightControl": {
+      "status": "unaudited"
+    },
+    ".#CopyrightEntry": {
+      "status": "unaudited"
+    },
+    ".#CreateBMapClientOptions": {
+      "status": "unaudited"
+    },
+    ".#CreateBMapPluginOptions": {
+      "status": "unaudited"
+    },
+    ".#CustomControl": {
+      "status": "unaudited"
+    },
+    ".#CustomOverlay": {
+      "status": "unaudited"
+    },
+    ".#CustomOverlayOptions": {
+      "status": "unaudited"
+    },
+    ".#CustomOverlayProps": {
+      "status": "unaudited"
+    },
+    ".#DOMLayer": {
+      "status": "unaudited"
+    },
+    ".#DataComponentProps": {
+      "status": "unaudited"
+    },
+    ".#Disposer": {
+      "status": "unaudited"
+    },
+    ".#DistrictLayer": {
+      "status": "unaudited"
+    },
+    ".#DistrictType": {
+      "status": "unaudited"
+    },
+    ".#DistrictTypeValue": {
+      "status": "unaudited"
+    },
+    ".#DriverEvent": {
+      "status": "unaudited"
+    },
+    ".#DrivingPolicy": {
+      "status": "unaudited"
+    },
+    ".#DrivingRouteEndpoint": {
+      "status": "unaudited"
+    },
+    ".#DrivingRouteOptions": {
+      "status": "unaudited"
+    },
+    ".#DrivingRouteRequest": {
+      "status": "unaudited"
+    },
+    ".#DrivingRouteResult": {
+      "status": "unaudited"
+    },
+    ".#EqualFn": {
+      "status": "unaudited"
+    },
+    ".#EventDriver": {
+      "status": "unaudited"
+    },
+    ".#EventSourceClient": {
+      "status": "unaudited"
+    },
+    ".#FeaturePick": {
+      "status": "unaudited"
+    },
+    ".#FeatureStateApi": {
+      "status": "unaudited"
+    },
+    ".#FeatureStateKeyDomain": {
+      "status": "unaudited"
+    },
+    ".#FeatureStateKeys": {
+      "status": "unaudited"
+    },
+    ".#FeatureStateKeysOf": {
+      "status": "unaudited"
+    },
+    ".#FeatureStateUpdateOptions": {
+      "status": "unaudited"
+    },
+    ".#FillLayer": {
+      "status": "unaudited"
+    },
+    ".#FillLayerProps": {
+      "status": "unaudited"
+    },
+    ".#FillLayerStyle": {
+      "status": "unaudited"
+    },
+    ".#FlyToOptions": {
+      "status": "unaudited"
+    },
+    ".#FrameScheduler": {
+      "status": "unaudited"
+    },
+    ".#GeoJSONLayer": {
+      "status": "unaudited"
+    },
+    ".#GeoPoint": {
+      "status": "unaudited"
+    },
+    ".#GeocodeDetailAddressComponents": {
+      "status": "unaudited"
+    },
+    ".#GeocodeDetailItemResult": {
+      "status": "unaudited"
+    },
+    ".#GeocodeDetailLocationOptions": {
+      "status": "fixed",
+      "note": "#210 `d9304f5`：新增并导出该选项类型"
+    },
+    ".#GeocodeDetailResult": {
+      "status": "unaudited"
+    },
+    ".#GeocodeItemResult": {
+      "status": "unaudited"
+    },
+    ".#GeocodedAddress": {
+      "status": "unaudited"
+    },
+    ".#GeocodedAddressComponents": {
+      "status": "unaudited"
+    },
+    ".#GeolocationAddressInfo": {
+      "status": "unaudited"
+    },
+    ".#GeolocationOptions": {
+      "status": "unaudited"
+    },
+    ".#GeometryDriver": {
+      "status": "unaudited"
+    },
+    ".#GroundOverlay": {
+      "status": "unaudited"
+    },
+    ".#GroundOverlayProps": {
+      "status": "unaudited"
+    },
+    ".#GroundOverlayType": {
+      "status": "unaudited"
+    },
+    ".#GroundOverlayUrl": {
+      "status": "unaudited"
+    },
+    ".#GroundPoint": {
+      "status": "unaudited"
+    },
+    ".#HeatmapLayer": {
+      "status": "unaudited"
+    },
+    ".#HeatmapLayerProps": {
+      "status": "unaudited"
+    },
+    ".#InfoWindow": {
+      "status": "unaudited"
+    },
+    ".#InfoWindowHandle": {
+      "status": "unaudited"
+    },
+    ".#InfoWindowOptions": {
+      "status": "unaudited"
+    },
+    ".#InfoWindowProps": {
+      "status": "unaudited"
+    },
+    ".#InfoWindowReadBackApi": {
+      "status": "unaudited"
+    },
+    ".#InitialMapOptions": {
+      "status": "unaudited"
+    },
+    ".#IntercityPolicy": {
+      "status": "unaudited"
+    },
+    ".#JsapiV4Driver": {
+      "status": "unaudited"
+    },
+    ".#Label": {
+      "status": "unaudited"
+    },
+    ".#LabelHandle": {
+      "status": "unaudited"
+    },
+    ".#LabelOptions": {
+      "status": "unaudited"
+    },
+    ".#LabelProps": {
+      "status": "unaudited"
+    },
+    ".#LabelStyle": {
+      "status": "unaudited"
+    },
+    ".#LayerCreateOptions": {
+      "status": "unaudited"
+    },
+    ".#LayerCtorSlot": {
+      "status": "unaudited"
+    },
+    ".#LayerData": {
+      "status": "unaudited"
+    },
+    ".#LayerDriver": {
+      "status": "unaudited"
+    },
+    ".#LayerHandle": {
+      "status": "unaudited"
+    },
+    ".#LayerKind": {
+      "status": "unaudited"
+    },
+    ".#LayerOperation": {
+      "status": "unaudited"
+    },
+    ".#LayerSurface": {
+      "status": "unaudited"
+    },
+    ".#LineLayer": {
+      "status": "unaudited"
+    },
+    ".#LineLayerProps": {
+      "status": "unaudited"
+    },
+    ".#LineLayerStyle": {
+      "status": "unaudited"
+    },
+    ".#LoadedJsapiV4": {
+      "status": "unaudited"
+    },
+    ".#LocalSearchBounds": {
+      "status": "unaudited"
+    },
+    ".#LocalSearchInBoundsRequest": {
+      "status": "unaudited"
+    },
+    ".#LocalSearchKeyword": {
+      "status": "unaudited"
+    },
+    ".#LocalSearchLocation": {
+      "status": "unaudited"
+    },
+    ".#LocalSearchNearbyRequest": {
+      "status": "unaudited"
+    },
+    ".#LocalSearchOptions": {
+      "status": "unaudited"
+    },
+    ".#LocalSearchPoi": {
+      "status": "unaudited"
+    },
+    ".#LocalSearchRenderOptions": {
+      "status": "unaudited"
+    },
+    ".#LocalSearchResult": {
+      "status": "unaudited"
+    },
+    ".#LocalSearchSearchOption": {
+      "status": "unaudited"
+    },
+    ".#LocationAddressComponents": {
+      "status": "unaudited"
+    },
+    ".#LocationCommandApi": {
+      "status": "unaudited"
+    },
+    ".#LocationControl": {
+      "status": "unaudited"
+    },
+    ".#MAP_EVENT_CATALOG": {
+      "status": "unaudited"
+    },
+    ".#MAP_EVENT_EMIT_ALIASES": {
+      "status": "unaudited"
+    },
+    ".#MAP_EVENT_NAMES": {
+      "status": "unaudited"
+    },
+    ".#MAP_SUSPEND_REASONS": {
+      "status": "unaudited"
+    },
+    ".#MVTLayer": {
+      "status": "unaudited"
+    },
+    ".#MVTLayerBaseEvent": {
+      "status": "unaudited"
+    },
+    ".#MVTLayerEntity": {
+      "status": "unaudited"
+    },
+    ".#MVTLayerMouseEvent": {
+      "status": "unaudited"
+    },
+    ".#MVTLayerMouseMoveEvent": {
+      "status": "unaudited"
+    },
+    ".#MVTLayerPickEvent": {
+      "status": "unaudited"
+    },
+    ".#MVTLayerProps": {
+      "status": "unaudited"
+    },
+    ".#MVTLayerStyle": {
+      "status": "unaudited"
+    },
+    ".#MVTLayerStyleEntry": {
+      "status": "unaudited"
+    },
+    ".#Map": {
+      "status": "unaudited"
+    },
+    ".#MapCommands": {
+      "status": "unaudited"
+    },
+    ".#MapComponentEventName": {
+      "status": "unaudited"
+    },
+    ".#MapContext": {
+      "status": "unaudited"
+    },
+    ".#MapDriver": {
+      "status": "unaudited"
+    },
+    ".#MapEventDefinition": {
+      "status": "unaudited"
+    },
+    ".#MapEventEmits": {
+      "status": "unaudited"
+    },
+    ".#MapEventHandler": {
+      "status": "unaudited"
+    },
+    ".#MapEventMap": {
+      "status": "unaudited"
+    },
+    ".#MapEventName": {
+      "status": "unaudited"
+    },
+    ".#MapEventPayload": {
+      "status": "unaudited"
+    },
+    ".#MapEventPayloadForName": {
+      "status": "unaudited"
+    },
+    ".#MapEventPayloadKind": {
+      "status": "unaudited"
+    },
+    ".#MapEventPayloadOf": {
+      "status": "unaudited"
+    },
+    ".#MapEventSdkName": {
+      "status": "unaudited"
+    },
+    ".#MapEventSource": {
+      "status": "unaudited"
+    },
+    ".#MapEventSourceInput": {
+      "status": "unaudited"
+    },
+    ".#MapExpose": {
+      "status": "unaudited"
+    },
+    ".#MapHandle": {
+      "status": "unaudited"
+    },
+    ".#MapInteraction": {
+      "status": "unaudited"
+    },
+    ".#MapLoadEvent": {
+      "status": "unaudited"
+    },
+    ".#MapLoadPayload": {
+      "status": "unaudited"
+    },
+    ".#MapMask": {
+      "status": "unaudited"
+    },
+    ".#MapMaskShowRegion": {
+      "status": "unaudited"
+    },
+    ".#MapMouseEvent": {
+      "status": "unaudited"
+    },
+    ".#MapPointerEvent": {
+      "status": "unaudited"
+    },
+    ".#MapProps": {
+      "status": "unaudited"
+    },
+    ".#MapReadyContext": {
+      "status": "unaudited"
+    },
+    ".#MapResizeEvent": {
+      "status": "unaudited"
+    },
+    ".#MapResizePayload": {
+      "status": "unaudited"
+    },
+    ".#MapStatus": {
+      "status": "unaudited"
+    },
+    ".#MapStatusRefs": {
+      "status": "unaudited"
+    },
+    ".#MapStyleInput": {
+      "status": "unaudited"
+    },
+    ".#MapSuspendReason": {
+      "status": "unaudited"
+    },
+    ".#MapType": {
+      "status": "unaudited"
+    },
+    ".#MapTypeChangeEvent": {
+      "status": "unaudited"
+    },
+    ".#MapTypeChangePayload": {
+      "status": "unaudited"
+    },
+    ".#MapTypeControl": {
+      "status": "unaudited"
+    },
+    ".#MapTypeIdName": {
+      "status": "unaudited"
+    },
+    ".#MapView": {
+      "status": "unaudited"
+    },
+    ".#Marker": {
+      "status": "unaudited"
+    },
+    ".#Marker3D": {
+      "status": "unaudited"
+    },
+    ".#MarkerCluster": {
+      "status": "unaudited"
+    },
+    ".#MarkerClusterEngine": {
+      "status": "unaudited"
+    },
+    ".#MarkerClusterProps": {
+      "status": "unaudited"
+    },
+    ".#MarkerCustomIcon": {
+      "status": "unaudited"
+    },
+    ".#MarkerHandle": {
+      "status": "unaudited"
+    },
+    ".#MarkerIcon": {
+      "status": "unaudited"
+    },
+    ".#MarkerIconInput": {
+      "status": "unaudited"
+    },
+    ".#MarkerIconName": {
+      "status": "unaudited"
+    },
+    ".#MarkerLabelInput": {
+      "status": "unaudited"
+    },
+    ".#MarkerLabelSpec": {
+      "status": "unaudited"
+    },
+    ".#MarkerList": {
+      "status": "unaudited"
+    },
+    ".#MarkerListProps": {
+      "status": "unaudited"
+    },
+    ".#MarkerOptions": {
+      "status": "unaudited"
+    },
+    ".#MarkerProps": {
+      "status": "unaudited"
+    },
+    ".#MarkerReadBackApi": {
+      "status": "unaudited"
+    },
+    ".#MenuItem": {
+      "status": "unaudited"
+    },
+    ".#MenuItemProps": {
+      "status": "unaudited"
+    },
+    ".#MenuItemView": {
+      "status": "unaudited"
+    },
+    ".#MenuSeparator": {
+      "status": "unaudited"
+    },
+    ".#NativeLayerCommonProps": {
+      "status": "unaudited"
+    },
+    ".#NativeLayerDriver": {
+      "status": "unaudited"
+    },
+    ".#NativeLayerFeatureKeys": {
+      "status": "unaudited"
+    },
+    ".#NativeLayerFeatureState": {
+      "status": "unaudited"
+    },
+    ".#NativeLayerFeatureStateMap": {
+      "status": "unaudited"
+    },
+    ".#NativeLayerKind": {
+      "status": "unaudited"
+    },
+    ".#NativeLayerOperation": {
+      "status": "unaudited"
+    },
+    ".#NativeLayerPickOptions": {
+      "status": "unaudited"
+    },
+    ".#NavigationControl": {
+      "status": "unaudited"
+    },
+    ".#NavigationControl3D": {
+      "status": "unaudited"
+    },
+    ".#OVERLAY_EVENT_MATRIX": {
+      "status": "unaudited"
+    },
+    ".#OVERLAY_KINDS_WITHOUT_EVENT_MATRIX": {
+      "status": "unaudited"
+    },
+    ".#OverlayAnchor": {
+      "status": "unaudited"
+    },
+    ".#OverlayAnchorName": {
+      "status": "unaudited"
+    },
+    ".#OverlayCommandTypes": {
+      "status": "unaudited"
+    },
+    ".#OverlayDriver": {
+      "status": "unaudited"
+    },
+    ".#OverlayEventDefinition": {
+      "status": "unaudited"
+    },
+    ".#OverlayEventMatrixEntry": {
+      "status": "unaudited"
+    },
+    ".#OverlayEventMatrixKey": {
+      "status": "unaudited"
+    },
+    ".#OverlayEventPayload": {
+      "status": "unaudited"
+    },
+    ".#OverlayEventPayloadKind": {
+      "status": "unaudited"
+    },
+    ".#OverlayEventSpec": {
+      "status": "unaudited"
+    },
+    ".#OverlayFieldMap": {
+      "status": "unaudited"
+    },
+    ".#OverlayFieldUpdate": {
+      "status": "unaudited"
+    },
+    ".#OverlayFieldWatch": {
+      "status": "unaudited"
+    },
+    ".#OverlayHandle": {
+      "status": "unaudited"
+    },
+    ".#OverlayKind": {
+      "status": "unaudited"
+    },
+    ".#OverlayPartialPointerEvent": {
+      "status": "unaudited"
+    },
+    ".#OverlayPointerEvent": {
+      "status": "unaudited"
+    },
+    ".#OverlayPositionModel": {
+      "status": "unaudited"
+    },
+    ".#OverlayPropertyPolicy": {
+      "status": "unaudited"
+    },
+    ".#OverlaySpec": {
+      "status": "unaudited"
+    },
+    ".#OverlayTarget": {
+      "status": "unaudited"
+    },
+    ".#OverviewMapControl": {
+      "status": "unaudited"
+    },
+    ".#PanToOptions": {
+      "status": "unaudited"
+    },
+    ".#Panorama": {
+      "status": "unaudited"
+    },
+    ".#PanoramaCaptureOptions": {
+      "status": "unaudited"
+    },
+    ".#PanoramaControl": {
+      "status": "unaudited"
+    },
+    ".#PanoramaCoverageLayer": {
+      "status": "unaudited"
+    },
+    ".#PanoramaDataInfo": {
+      "status": "unaudited"
+    },
+    ".#PanoramaDriver": {
+      "status": "unaudited"
+    },
+    ".#PanoramaLabel": {
+      "status": "unaudited"
+    },
+    ".#PanoramaLabelHandle": {
+      "status": "unaudited"
+    },
+    ".#PanoramaLabelOptions": {
+      "status": "unaudited"
+    },
+    ".#PanoramaLink": {
+      "status": "unaudited"
+    },
+    ".#PanoramaOptions": {
+      "status": "unaudited"
+    },
+    ".#PanoramaPoiType": {
+      "status": "unaudited"
+    },
+    ".#PanoramaPov": {
+      "status": "unaudited"
+    },
+    ".#PanoramaSceneType": {
+      "status": "unaudited"
+    },
+    ".#PanoramaViewerDriver": {
+      "status": "unaudited"
+    },
+    ".#PathOptions": {
+      "status": "unaudited"
+    },
+    ".#PathReadBackApi": {
+      "status": "unaudited"
+    },
+    ".#Pixel": {
+      "status": "unaudited"
+    },
+    ".#PluginCatalogEntry": {
+      "status": "unaudited"
+    },
+    ".#Point": {
+      "status": "unaudited"
+    },
+    ".#PointCollection": {
+      "status": "unaudited"
+    },
+    ".#PointCollectionProps": {
+      "status": "unaudited"
+    },
+    ".#PointIconLayer": {
+      "status": "unaudited"
+    },
+    ".#PointIconLayerProps": {
+      "status": "unaudited"
+    },
+    ".#PointInput": {
+      "status": "unaudited"
+    },
+    ".#PointLayer": {
+      "status": "unaudited"
+    },
+    ".#PointLayerProps": {
+      "status": "unaudited"
+    },
+    ".#PointLike": {
+      "status": "unaudited"
+    },
+    ".#PointPick": {
+      "status": "unaudited"
+    },
+    ".#Polygon": {
+      "status": "unaudited"
+    },
+    ".#PolygonHandle": {
+      "status": "unaudited"
+    },
+    ".#PolygonLayer": {
+      "status": "unaudited"
+    },
+    ".#PolygonLayerProps": {
+      "status": "unaudited"
+    },
+    ".#PolygonLayerStyle": {
+      "status": "unaudited"
+    },
+    ".#PolygonProps": {
+      "status": "unaudited"
+    },
+    ".#Polyline": {
+      "status": "unaudited"
+    },
+    ".#PolylineHandle": {
+      "status": "unaudited"
+    },
+    ".#PolylineLayer": {
+      "status": "unaudited"
+    },
+    ".#PolylineLayerProps": {
+      "status": "unaudited"
+    },
+    ".#PolylineLayerStyle": {
+      "status": "unaudited"
+    },
+    ".#PolylineProps": {
+      "status": "unaudited"
+    },
+    ".#Prism": {
+      "status": "unaudited"
+    },
+    ".#PrismProps": {
+      "status": "unaudited"
+    },
+    ".#PublicBMapClient": {
+      "status": "unaudited"
+    },
+    ".#PublicMapContext": {
+      "status": "unaudited"
+    },
+    ".#RasterTileLayer": {
+      "status": "unaudited"
+    },
+    ".#Rectangle": {
+      "status": "unaudited"
+    },
+    ".#RectangleProps": {
+      "status": "unaudited"
+    },
+    ".#ResolvedMapEvent": {
+      "status": "unaudited"
+    },
+    ".#ResourceScope": {
+      "status": "unaudited"
+    },
+    ".#ResourceScopeOptions": {
+      "status": "unaudited"
+    },
+    ".#RidingRouteOptions": {
+      "status": "unaudited"
+    },
+    ".#RidingRouteResult": {
+      "status": "unaudited"
+    },
+    ".#RouteEndpoint": {
+      "status": "unaudited"
+    },
+    ".#RouteEndpointInfo": {
+      "status": "unaudited"
+    },
+    ".#RouteEndpointPoi": {
+      "status": "unaudited"
+    },
+    ".#RouteLeg": {
+      "status": "unaudited"
+    },
+    ".#RoutePlan": {
+      "status": "unaudited"
+    },
+    ".#RouteRenderOptions": {
+      "status": "unaudited"
+    },
+    ".#RouteRenderState": {
+      "status": "unaudited"
+    },
+    ".#RouteRequest": {
+      "status": "unaudited"
+    },
+    ".#RouteResult": {
+      "status": "unaudited"
+    },
+    ".#RouteServiceHandle": {
+      "status": "unaudited"
+    },
+    ".#RouteServiceKind": {
+      "status": "unaudited"
+    },
+    ".#RouteState": {
+      "status": "unaudited"
+    },
+    ".#RouteStep": {
+      "status": "unaudited"
+    },
+    ".#RouteTaxiFare": {
+      "status": "unaudited"
+    },
+    ".#RouteTaxiFareDetail": {
+      "status": "unaudited"
+    },
+    ".#ScaleControl": {
+      "status": "unaudited"
+    },
+    ".#SdkHandle": {
+      "status": "unaudited"
+    },
+    ".#SdkResourceSpec": {
+      "status": "unaudited"
+    },
+    ".#SdkResourceStatus": {
+      "status": "unaudited"
+    },
+    ".#ServiceCall": {
+      "status": "unaudited"
+    },
+    ".#ServiceCallStatus": {
+      "status": "unaudited"
+    },
+    ".#ServiceDriver": {
+      "status": "unaudited"
+    },
+    ".#ServiceErrorInfo": {
+      "status": "unaudited"
+    },
+    ".#ServiceHandle": {
+      "status": "unaudited"
+    },
+    ".#ServiceInvocationDriver": {
+      "status": "unaudited"
+    },
+    ".#ServiceResult": {
+      "status": "unaudited"
+    },
+    ".#SetZoomOptions": {
+      "status": "unaudited"
+    },
+    ".#Size": {
+      "status": "unaudited"
+    },
+    ".#SizeLike": {
+      "status": "unaudited"
+    },
+    ".#StyleExpression": {
+      "status": "unaudited"
+    },
+    ".#TargetContext": {
+      "status": "unaudited"
+    },
+    ".#TargetKind": {
+      "status": "unaudited"
+    },
+    ".#TextLayer": {
+      "status": "unaudited"
+    },
+    ".#TextLayerAnchor": {
+      "status": "unaudited"
+    },
+    ".#TextLayerPick": {
+      "status": "unaudited"
+    },
+    ".#TextLayerProps": {
+      "status": "unaudited"
+    },
+    ".#TextLayerStyle": {
+      "status": "unaudited"
+    },
+    ".#TileLayer": {
+      "status": "unaudited"
+    },
+    ".#TrackLineLayer": {
+      "status": "unaudited"
+    },
+    ".#TrackLineLayerExpose": {
+      "status": "unaudited"
+    },
+    ".#TrackLineLayerProps": {
+      "status": "unaudited"
+    },
+    ".#TrackLineObserved": {
+      "status": "unaudited"
+    },
+    ".#TrafficLayer": {
+      "status": "unaudited"
+    },
+    ".#TransitLineSegment": {
+      "status": "unaudited"
+    },
+    ".#TransitPolicy": {
+      "status": "unaudited"
+    },
+    ".#TransitRouteOptions": {
+      "status": "unaudited"
+    },
+    ".#TransitRoutePlan": {
+      "status": "unaudited"
+    },
+    ".#TransitRouteRequest": {
+      "status": "unaudited"
+    },
+    ".#TransitRouteResult": {
+      "status": "unaudited"
+    },
+    ".#TransitRouteSegment": {
+      "status": "unaudited"
+    },
+    ".#TransitVehiclePolicy": {
+      "status": "unaudited"
+    },
+    ".#TransitWalkSegment": {
+      "status": "unaudited"
+    },
+    ".#UnsupportedBehavior": {
+      "status": "unaudited"
+    },
+    ".#UseControllableStateOptions": {
+      "status": "unaudited"
+    },
+    ".#UseMapEventOptions": {
+      "status": "unaudited"
+    },
+    ".#UseMapStatusOptions": {
+      "status": "unaudited"
+    },
+    ".#UseOverlaySpecOptions": {
+      "status": "unaudited"
+    },
+    ".#UseOverlaySpecResult": {
+      "status": "unaudited"
+    },
+    ".#UseViewAnimationOptions": {
+      "status": "unaudited"
+    },
+    ".#UseViewAnimationReturn": {
+      "status": "unaudited"
+    },
+    ".#ViewAnimationCancelOutcome": {
+      "status": "unaudited"
+    },
+    ".#ViewAnimationKeyFrames": {
+      "status": "unaudited"
+    },
+    ".#ViewAnimationStatus": {
+      "status": "unaudited"
+    },
+    ".#ViewCommandOptions": {
+      "status": "unaudited"
+    },
+    ".#Viewport": {
+      "status": "unaudited"
+    },
+    ".#ViewportOptions": {
+      "status": "unaudited"
+    },
+    ".#VisualizationLayerCommonProps": {
+      "status": "unaudited"
+    },
+    ".#VisualizationPickOptions": {
+      "status": "unaudited"
+    },
+    ".#VisualizationStyleValue": {
+      "status": "unaudited"
+    },
+    ".#VisualizationZoomCtorOptions": {
+      "status": "unaudited"
+    },
+    ".#WMSLayer": {
+      "status": "unaudited"
+    },
+    ".#WMTSLayer": {
+      "status": "unaudited"
+    },
+    ".#WalkingRouteOptions": {
+      "status": "unaudited"
+    },
+    ".#WalkingRouteResult": {
+      "status": "unaudited"
+    },
+    ".#XYLike": {
+      "status": "unaudited"
+    },
+    ".#XYZLayer": {
+      "status": "unaudited"
+    },
+    ".#ZoomControl": {
+      "status": "unaudited"
+    },
+    ".#bmapClientContextKey": {
+      "status": "unaudited"
+    },
+    ".#bmapConfigKey": {
+      "status": "unaudited"
+    },
+    ".#createBMapClientDefinition": {
+      "status": "unaudited"
+    },
+    ".#createBMapPlugin": {
+      "status": "unaudited"
+    },
+    ".#createClientContext": {
+      "status": "unaudited"
+    },
+    ".#defaultClientDefinitionKey": {
+      "status": "unaudited"
+    },
+    ".#drawingManagerPlugin": {
+      "status": "unaudited"
+    },
+    ".#dynamicEmit": {
+      "status": "unaudited"
+    },
+    ".#geoUtilsPlugin": {
+      "status": "unaudited"
+    },
+    ".#mapVglPlugin": {
+      "status": "unaudited"
+    },
+    ".#mvtFeatureStateKey": {
+      "status": "unaudited"
+    },
+    ".#normalizeEventKey": {
+      "status": "unaudited"
+    },
+    ".#overlayEventOf": {
+      "status": "unaudited"
+    },
+    ".#overlayEventsOf": {
+      "status": "unaudited"
+    },
+    ".#overlayPointerFallback": {
+      "status": "unaudited"
+    },
+    ".#resolveMapContext": {
+      "status": "unaudited"
+    },
+    ".#resolveMapEventName": {
+      "status": "unaudited"
+    },
+    ".#resolvePluginDefinition": {
+      "status": "unaudited"
+    },
+    ".#stringToPluginDefinitions": {
+      "status": "unaudited"
+    },
+    ".#targetContextKey": {
+      "status": "unaudited"
+    },
+    ".#toSdkEventName": {
+      "status": "unaudited"
+    },
+    ".#toVueEventName": {
+      "status": "unaudited"
+    },
+    ".#trackAnimationPlugin": {
+      "status": "unaudited"
+    },
+    ".#urlPluginDefinition": {
+      "status": "unaudited"
+    },
+    ".#useAreaBoundary": {
+      "status": "fixed",
+      "note": "#211 `85720cc`：补上官方 Boundary#parsebdStr 出口"
+    },
+    ".#useControllableState": {
+      "status": "unaudited"
+    },
+    ".#useConvertor": {
+      "status": "unaudited"
+    },
+    ".#useDrivingRoute": {
+      "status": "unaudited"
+    },
+    ".#useGeocodeDetail": {
+      "status": "fixed",
+      "note": "#210 `d9304f5`：补上官方 LocationOptions（poiRadius / numPois）"
+    },
+    ".#useGeocoder": {
+      "status": "deferred",
+      "note": "官方 Geocoder ctor({language}) 无路径：涉共享实例的构造期归属，待裁决"
+    },
+    ".#useGeolocation": {
+      "status": "deferred",
+      "note": "官方 enable|disableSDKLocation 未暴露：简单档是否也需活实例通道，待裁决"
+    },
+    ".#useIpLocation": {
+      "status": "deferred",
+      "note": "官方 LocalCity#opts.renderOptions 未暴露：涉地图所有权，待裁决"
+    },
+    ".#useLocalSearch": {
+      "status": "fixed",
+      "note": "#212 `cf8efb9` + #214 `0157709`：同步成员、四个布尔开关、withHandle 通道"
+    },
+    ".#useMap": {
+      "status": "unaudited"
+    },
+    ".#useMapContext": {
+      "status": "unaudited"
+    },
+    ".#useMapEvent": {
+      "status": "unaudited"
+    },
+    ".#useMapReady": {
+      "status": "unaudited"
+    },
+    ".#useMapStatus": {
+      "status": "unaudited"
+    },
+    ".#useMarkerIcons": {
+      "status": "unaudited"
+    },
+    ".#useOptionalClientContext": {
+      "status": "unaudited"
+    },
+    ".#useOverlaySpec": {
+      "status": "unaudited"
+    },
+    ".#usePanoramaService": {
+      "status": "unaudited"
+    },
+    ".#useParentOverlayHandle": {
+      "status": "unaudited"
+    },
+    ".#useRequiredClientContext": {
+      "status": "unaudited"
+    },
+    ".#useRidingRoute": {
+      "status": "unaudited"
+    },
+    ".#useSdkResource": {
+      "status": "unaudited"
+    },
+    ".#useTransitRoute": {
+      "status": "unaudited"
+    },
+    ".#useViewAnimation": {
+      "status": "unaudited"
+    },
+    ".#useWalkingRoute": {
+      "status": "unaudited"
+    },
+    "./advanced#AutocompleteOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#AutocompleteUpdateOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#BMapClient": {
+      "status": "unaudited"
+    },
+    "./advanced#BMapDriver": {
+      "status": "fixed",
+      "note": "#212 `cf8efb9`：新增可选成员 `isMapHandleLive?`"
+    },
+    "./advanced#BMapDriverFactory": {
+      "status": "unaudited"
+    },
+    "./advanced#BMapDriverInput": {
+      "status": "unaudited"
+    },
+    "./advanced#BMapEngine": {
+      "status": "unaudited"
+    },
+    "./advanced#BMapError": {
+      "status": "unaudited"
+    },
+    "./advanced#BMapErrorCode": {
+      "status": "unaudited"
+    },
+    "./advanced#BMapErrorOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#BMapLoadOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#BMapProviderLike": {
+      "status": "unaudited"
+    },
+    "./advanced#BaiduJsapiV4ProviderOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#BoundaryParseRequest": {
+      "status": "fixed",
+      "note": "#211 `85720cc`：新增并导出该请求类型"
+    },
+    "./advanced#BoundaryRequest": {
+      "status": "unaudited"
+    },
+    "./advanced#BoundaryRings": {
+      "status": "unaudited"
+    },
+    "./advanced#Bounds": {
+      "status": "unaudited"
+    },
+    "./advanced#CAPABILITY_CATALOG": {
+      "status": "unaudited"
+    },
+    "./advanced#CAPABILITY_FAMILIES": {
+      "status": "unaudited"
+    },
+    "./advanced#CAPABILITY_IDS": {
+      "status": "unaudited"
+    },
+    "./advanced#CAPABILITY_STATUSES": {
+      "status": "unaudited"
+    },
+    "./advanced#Capability": {
+      "status": "unaudited"
+    },
+    "./advanced#CapabilityDescriptor": {
+      "status": "unaudited"
+    },
+    "./advanced#CapabilityExplanation": {
+      "status": "unaudited"
+    },
+    "./advanced#CapabilityFamily": {
+      "status": "unaudited"
+    },
+    "./advanced#CapabilityReason": {
+      "status": "unaudited"
+    },
+    "./advanced#CapabilityRegistry": {
+      "status": "unaudited"
+    },
+    "./advanced#CapabilityStatus": {
+      "status": "unaudited"
+    },
+    "./advanced#CircleHandle": {
+      "status": "unaudited"
+    },
+    "./advanced#CircleReadBackApi": {
+      "status": "unaudited"
+    },
+    "./advanced#CityListCommandApi": {
+      "status": "unaudited"
+    },
+    "./advanced#ContextMenuCommandApi": {
+      "status": "unaudited"
+    },
+    "./advanced#ControlDriver": {
+      "status": "unaudited"
+    },
+    "./advanced#ControlHandle": {
+      "status": "unaudited"
+    },
+    "./advanced#ControlKind": {
+      "status": "unaudited"
+    },
+    "./advanced#ControlOptionStatus": {
+      "status": "unaudited"
+    },
+    "./advanced#ControlOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#ConvertorRequest": {
+      "status": "unaudited"
+    },
+    "./advanced#CoordinateFromType": {
+      "status": "unaudited"
+    },
+    "./advanced#CoordinateToType": {
+      "status": "unaudited"
+    },
+    "./advanced#CopyrightEntry": {
+      "status": "unaudited"
+    },
+    "./advanced#CreateBMapClientOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#CreateCapabilityRegistryOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#CreateJsapiV4DriverInput": {
+      "status": "unaudited"
+    },
+    "./advanced#CreateLoadedJsapiV4Input": {
+      "status": "unaudited"
+    },
+    "./advanced#CrossOriginValue": {
+      "status": "unaudited"
+    },
+    "./advanced#CustomOverlayOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#CustomScriptV4ProviderOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#DriverEvent": {
+      "status": "unaudited"
+    },
+    "./advanced#DrivingPolicy": {
+      "status": "unaudited"
+    },
+    "./advanced#DrivingRouteEndpoint": {
+      "status": "unaudited"
+    },
+    "./advanced#DrivingRouteOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#DrivingRouteRequest": {
+      "status": "unaudited"
+    },
+    "./advanced#DrivingRouteResult": {
+      "status": "unaudited"
+    },
+    "./advanced#EventDriver": {
+      "status": "unaudited"
+    },
+    "./advanced#FlyToOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#GeocodeRequest": {
+      "status": "unaudited"
+    },
+    "./advanced#GeocodedAddress": {
+      "status": "unaudited"
+    },
+    "./advanced#GeocodedAddressComponents": {
+      "status": "unaudited"
+    },
+    "./advanced#GeolocationAddressInfo": {
+      "status": "unaudited"
+    },
+    "./advanced#GeolocationFix": {
+      "status": "unaudited"
+    },
+    "./advanced#GeolocationOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#GeometryDriver": {
+      "status": "unaudited"
+    },
+    "./advanced#HANDLE_BRAND": {
+      "status": "unaudited"
+    },
+    "./advanced#InfoWindowHandle": {
+      "status": "unaudited"
+    },
+    "./advanced#InfoWindowOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#InfoWindowReadBackApi": {
+      "status": "unaudited"
+    },
+    "./advanced#InitialMapOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#IntercityPolicy": {
+      "status": "unaudited"
+    },
+    "./advanced#JsapiV4Driver": {
+      "status": "unaudited"
+    },
+    "./advanced#JsapiV4Engine": {
+      "status": "unaudited"
+    },
+    "./advanced#JsapiV4LoadMetadata": {
+      "status": "unaudited"
+    },
+    "./advanced#JsapiV4LoadMode": {
+      "status": "unaudited"
+    },
+    "./advanced#JsapiV4Namespace": {
+      "status": "unaudited"
+    },
+    "./advanced#JsapiV4Provider": {
+      "status": "unaudited"
+    },
+    "./advanced#JsapiV4ProviderId": {
+      "status": "unaudited"
+    },
+    "./advanced#JsapiV4ScriptMode": {
+      "status": "unaudited"
+    },
+    "./advanced#JsapiV4ServiceDriver": {
+      "status": "unaudited"
+    },
+    "./advanced#JsapiV4VersionSource": {
+      "status": "unaudited"
+    },
+    "./advanced#LabelHandle": {
+      "status": "unaudited"
+    },
+    "./advanced#LabelOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#LayerCreateOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#LayerCtorSlot": {
+      "status": "unaudited"
+    },
+    "./advanced#LayerData": {
+      "status": "unaudited"
+    },
+    "./advanced#LayerDriver": {
+      "status": "unaudited"
+    },
+    "./advanced#LayerHandle": {
+      "status": "unaudited"
+    },
+    "./advanced#LayerKind": {
+      "status": "unaudited"
+    },
+    "./advanced#LayerOperation": {
+      "status": "unaudited"
+    },
+    "./advanced#LayerSurface": {
+      "status": "unaudited"
+    },
+    "./advanced#LoadedJsapiV4": {
+      "status": "unaudited"
+    },
+    "./advanced#LocalCityFix": {
+      "status": "unaudited"
+    },
+    "./advanced#LocalSearchBounds": {
+      "status": "unaudited"
+    },
+    "./advanced#LocalSearchInBoundsRequest": {
+      "status": "unaudited"
+    },
+    "./advanced#LocalSearchKeyword": {
+      "status": "unaudited"
+    },
+    "./advanced#LocalSearchNearbyRequest": {
+      "status": "unaudited"
+    },
+    "./advanced#LocalSearchOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#LocalSearchPoi": {
+      "status": "unaudited"
+    },
+    "./advanced#LocalSearchRenderOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#LocalSearchResult": {
+      "status": "unaudited"
+    },
+    "./advanced#LocalSearchSearchOption": {
+      "status": "unaudited"
+    },
+    "./advanced#LocationAddressComponents": {
+      "status": "unaudited"
+    },
+    "./advanced#LocationCommandApi": {
+      "status": "unaudited"
+    },
+    "./advanced#MapDriver": {
+      "status": "unaudited"
+    },
+    "./advanced#MapHandle": {
+      "status": "unaudited"
+    },
+    "./advanced#MapInteraction": {
+      "status": "unaudited"
+    },
+    "./advanced#MapMouseEvent": {
+      "status": "unaudited"
+    },
+    "./advanced#MapStyleInput": {
+      "status": "unaudited"
+    },
+    "./advanced#MapType": {
+      "status": "unaudited"
+    },
+    "./advanced#MapView": {
+      "status": "unaudited"
+    },
+    "./advanced#MarkerHandle": {
+      "status": "unaudited"
+    },
+    "./advanced#MarkerIconInput": {
+      "status": "unaudited"
+    },
+    "./advanced#MarkerLabelInput": {
+      "status": "unaudited"
+    },
+    "./advanced#MarkerOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#MarkerReadBackApi": {
+      "status": "unaudited"
+    },
+    "./advanced#MenuItemView": {
+      "status": "unaudited"
+    },
+    "./advanced#NativeLayerData": {
+      "status": "unaudited"
+    },
+    "./advanced#NativeLayerDriver": {
+      "status": "unaudited"
+    },
+    "./advanced#NativeLayerFeatureKeys": {
+      "status": "unaudited"
+    },
+    "./advanced#NativeLayerFeatureState": {
+      "status": "unaudited"
+    },
+    "./advanced#NativeLayerFeatureStateMap": {
+      "status": "unaudited"
+    },
+    "./advanced#NativeLayerHandle": {
+      "status": "unaudited"
+    },
+    "./advanced#NativeLayerKind": {
+      "status": "unaudited"
+    },
+    "./advanced#NativeLayerOperation": {
+      "status": "unaudited"
+    },
+    "./advanced#NativeLayerPick": {
+      "status": "unaudited"
+    },
+    "./advanced#NativeLayerTextPick": {
+      "status": "unaudited"
+    },
+    "./advanced#NativeLayerZoomRange": {
+      "status": "unaudited"
+    },
+    "./advanced#NormalizedProvider": {
+      "status": "unaudited"
+    },
+    "./advanced#OFFICIAL_V4_VERSION": {
+      "status": "unaudited"
+    },
+    "./advanced#OfficialJsapiLoadOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#OfficialJsapiLoader": {
+      "status": "unaudited"
+    },
+    "./advanced#OfficialJsapiV4Version": {
+      "status": "unaudited"
+    },
+    "./advanced#OverlayAnchorName": {
+      "status": "unaudited"
+    },
+    "./advanced#OverlayDriver": {
+      "status": "unaudited"
+    },
+    "./advanced#OverlayHandle": {
+      "status": "unaudited"
+    },
+    "./advanced#OverlayKind": {
+      "status": "unaudited"
+    },
+    "./advanced#OverlayPropertyPolicy": {
+      "status": "unaudited"
+    },
+    "./advanced#OverlayTarget": {
+      "status": "unaudited"
+    },
+    "./advanced#PanToOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#PanoramaCaptureOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#PanoramaDataInfo": {
+      "status": "unaudited"
+    },
+    "./advanced#PanoramaDriver": {
+      "status": "unaudited"
+    },
+    "./advanced#PanoramaHandle": {
+      "status": "unaudited"
+    },
+    "./advanced#PanoramaLabelHandle": {
+      "status": "unaudited"
+    },
+    "./advanced#PanoramaLabelOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#PanoramaLink": {
+      "status": "unaudited"
+    },
+    "./advanced#PanoramaOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#PanoramaPoiType": {
+      "status": "unaudited"
+    },
+    "./advanced#PanoramaPov": {
+      "status": "unaudited"
+    },
+    "./advanced#PanoramaSceneType": {
+      "status": "unaudited"
+    },
+    "./advanced#PanoramaServiceHandle": {
+      "status": "unaudited"
+    },
+    "./advanced#PanoramaSwitchOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#PanoramaViewerDriver": {
+      "status": "unaudited"
+    },
+    "./advanced#PathOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#PathReadBackApi": {
+      "status": "unaudited"
+    },
+    "./advanced#Pixel": {
+      "status": "unaudited"
+    },
+    "./advanced#Point": {
+      "status": "unaudited"
+    },
+    "./advanced#PointInput": {
+      "status": "unaudited"
+    },
+    "./advanced#PolygonHandle": {
+      "status": "unaudited"
+    },
+    "./advanced#PolylineHandle": {
+      "status": "unaudited"
+    },
+    "./advanced#ReverseGeocodeRequest": {
+      "status": "unaudited"
+    },
+    "./advanced#RidingRouteOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#RidingRouteResult": {
+      "status": "unaudited"
+    },
+    "./advanced#RouteEndpoint": {
+      "status": "unaudited"
+    },
+    "./advanced#RouteEndpointInfo": {
+      "status": "unaudited"
+    },
+    "./advanced#RouteEndpointPoi": {
+      "status": "unaudited"
+    },
+    "./advanced#RouteLeg": {
+      "status": "unaudited"
+    },
+    "./advanced#RoutePlan": {
+      "status": "unaudited"
+    },
+    "./advanced#RouteRenderOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#RouteRenderState": {
+      "status": "unaudited"
+    },
+    "./advanced#RouteRequest": {
+      "status": "unaudited"
+    },
+    "./advanced#RouteResult": {
+      "status": "unaudited"
+    },
+    "./advanced#RouteServiceHandle": {
+      "status": "unaudited"
+    },
+    "./advanced#RouteServiceKind": {
+      "status": "unaudited"
+    },
+    "./advanced#RouteState": {
+      "status": "unaudited"
+    },
+    "./advanced#RouteStep": {
+      "status": "unaudited"
+    },
+    "./advanced#RouteTaxiFare": {
+      "status": "unaudited"
+    },
+    "./advanced#RouteTaxiFareDetail": {
+      "status": "unaudited"
+    },
+    "./advanced#SdkHandle": {
+      "status": "unaudited"
+    },
+    "./advanced#ServiceCall": {
+      "status": "unaudited"
+    },
+    "./advanced#ServiceCallStatus": {
+      "status": "unaudited"
+    },
+    "./advanced#ServiceDriver": {
+      "status": "unaudited"
+    },
+    "./advanced#ServiceErrorInfo": {
+      "status": "unaudited"
+    },
+    "./advanced#ServiceHandle": {
+      "status": "unaudited"
+    },
+    "./advanced#ServiceInvocationDriver": {
+      "status": "unaudited"
+    },
+    "./advanced#ServiceResult": {
+      "status": "unaudited"
+    },
+    "./advanced#SetZoomOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#Size": {
+      "status": "unaudited"
+    },
+    "./advanced#TransitLineSegment": {
+      "status": "unaudited"
+    },
+    "./advanced#TransitPolicy": {
+      "status": "unaudited"
+    },
+    "./advanced#TransitRouteOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#TransitRoutePlan": {
+      "status": "unaudited"
+    },
+    "./advanced#TransitRouteRequest": {
+      "status": "unaudited"
+    },
+    "./advanced#TransitRouteResult": {
+      "status": "unaudited"
+    },
+    "./advanced#TransitRouteSegment": {
+      "status": "unaudited"
+    },
+    "./advanced#TransitVehiclePolicy": {
+      "status": "unaudited"
+    },
+    "./advanced#TransitWalkSegment": {
+      "status": "unaudited"
+    },
+    "./advanced#UnsupportedBehavior": {
+      "status": "unaudited"
+    },
+    "./advanced#UnsupportedCapabilityError": {
+      "status": "unaudited"
+    },
+    "./advanced#ViewAnimationCancelOutcome": {
+      "status": "unaudited"
+    },
+    "./advanced#ViewCommandOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#Viewport": {
+      "status": "unaudited"
+    },
+    "./advanced#ViewportOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#WalkingRouteOptions": {
+      "status": "unaudited"
+    },
+    "./advanced#WalkingRouteResult": {
+      "status": "unaudited"
+    },
+    "./advanced#assertLoadedSdk": {
+      "status": "unaudited"
+    },
+    "./advanced#baiduJsapiV4Provider": {
+      "status": "unaudited"
+    },
+    "./advanced#createBMapClient": {
+      "status": "unaudited"
+    },
+    "./advanced#createBMapClientDefinition": {
+      "status": "unaudited"
+    },
+    "./advanced#createCapabilityRegistry": {
+      "status": "unaudited"
+    },
+    "./advanced#createHandle": {
+      "status": "unaudited"
+    },
+    "./advanced#createJsapiV4Driver": {
+      "status": "unaudited"
+    },
+    "./advanced#createLoadedJsapiV4": {
+      "status": "unaudited"
+    },
+    "./advanced#customScriptV4Provider": {
+      "status": "unaudited"
+    },
+    "./advanced#existingGlobalV4Provider": {
+      "status": "unaudited"
+    },
+    "./advanced#isLoadedSdk": {
+      "status": "unaudited"
+    },
+    "./advanced#isPointLike": {
+      "status": "unaudited"
+    },
+    "./advanced#jsapiV4DriverFactory": {
+      "status": "unaudited"
+    },
+    "./advanced#normalizeMapMouseEvent": {
+      "status": "unaudited"
+    },
+    "./advanced#normalizeProvider": {
+      "status": "unaudited"
+    },
+    "./advanced#toPlainPoint": {
+      "status": "unaudited"
+    },
+    "./advanced#toPlainPoints": {
+      "status": "unaudited"
+    },
+    "./advanced#toPoint": {
+      "status": "unaudited"
+    },
+    "./advanced#unwrapRaw": {
+      "status": "unaudited"
+    },
+    "./components#Autocomplete": {
+      "status": "unaudited"
+    },
+    "./components#BMapProvider": {
+      "status": "unaudited"
+    },
+    "./components#BezierCurve": {
+      "status": "unaudited"
+    },
+    "./components#Circle": {
+      "status": "unaudited"
+    },
+    "./components#CityListControl": {
+      "status": "unaudited"
+    },
+    "./components#ContextMenu": {
+      "status": "unaudited"
+    },
+    "./components#CopyrightControl": {
+      "status": "unaudited"
+    },
+    "./components#CustomControl": {
+      "status": "unaudited"
+    },
+    "./components#CustomOverlay": {
+      "status": "unaudited"
+    },
+    "./components#DOMLayer": {
+      "status": "unaudited"
+    },
+    "./components#DistrictLayer": {
+      "status": "unaudited"
+    },
+    "./components#FillLayer": {
+      "status": "unaudited"
+    },
+    "./components#GeoJSONLayer": {
+      "status": "unaudited"
+    },
+    "./components#GroundOverlay": {
+      "status": "unaudited"
+    },
+    "./components#GroundPoint": {
+      "status": "unaudited"
+    },
+    "./components#HeatmapLayer": {
+      "status": "unaudited"
+    },
+    "./components#InfoWindow": {
+      "status": "unaudited"
+    },
+    "./components#Label": {
+      "status": "unaudited"
+    },
+    "./components#LineLayer": {
+      "status": "unaudited"
+    },
+    "./components#LocationControl": {
+      "status": "unaudited"
+    },
+    "./components#MVTLayer": {
+      "status": "unaudited"
+    },
+    "./components#Map": {
+      "status": "unaudited"
+    },
+    "./components#MapMask": {
+      "status": "unaudited"
+    },
+    "./components#MapTypeControl": {
+      "status": "unaudited"
+    },
+    "./components#Marker": {
+      "status": "unaudited"
+    },
+    "./components#Marker3D": {
+      "status": "unaudited"
+    },
+    "./components#MarkerCluster": {
+      "status": "unaudited"
+    },
+    "./components#MarkerList": {
+      "status": "unaudited"
+    },
+    "./components#MenuItem": {
+      "status": "unaudited"
+    },
+    "./components#MenuSeparator": {
+      "status": "unaudited"
+    },
+    "./components#NavigationControl": {
+      "status": "unaudited"
+    },
+    "./components#NavigationControl3D": {
+      "status": "unaudited"
+    },
+    "./components#OverviewMapControl": {
+      "status": "unaudited"
+    },
+    "./components#Panorama": {
+      "status": "unaudited"
+    },
+    "./components#PanoramaControl": {
+      "status": "unaudited"
+    },
+    "./components#PanoramaCoverageLayer": {
+      "status": "unaudited"
+    },
+    "./components#PanoramaLabel": {
+      "status": "unaudited"
+    },
+    "./components#PointCollection": {
+      "status": "unaudited"
+    },
+    "./components#PointIconLayer": {
+      "status": "unaudited"
+    },
+    "./components#PointLayer": {
+      "status": "unaudited"
+    },
+    "./components#Polygon": {
+      "status": "unaudited"
+    },
+    "./components#PolygonLayer": {
+      "status": "unaudited"
+    },
+    "./components#Polyline": {
+      "status": "unaudited"
+    },
+    "./components#PolylineLayer": {
+      "status": "unaudited"
+    },
+    "./components#Prism": {
+      "status": "unaudited"
+    },
+    "./components#RasterTileLayer": {
+      "status": "unaudited"
+    },
+    "./components#Rectangle": {
+      "status": "unaudited"
+    },
+    "./components#ScaleControl": {
+      "status": "unaudited"
+    },
+    "./components#TextLayer": {
+      "status": "unaudited"
+    },
+    "./components#TileLayer": {
+      "status": "unaudited"
+    },
+    "./components#TrackLineLayer": {
+      "status": "unaudited"
+    },
+    "./components#TrafficLayer": {
+      "status": "unaudited"
+    },
+    "./components#WMSLayer": {
+      "status": "unaudited"
+    },
+    "./components#WMTSLayer": {
+      "status": "unaudited"
+    },
+    "./components#XYZLayer": {
+      "status": "unaudited"
+    },
+    "./components#ZoomControl": {
+      "status": "unaudited"
+    },
+    "./composables#AreaBoundary": {
+      "status": "unaudited"
+    },
+    "./composables#AutocompleteOptions": {
+      "status": "unaudited"
+    },
+    "./composables#AutocompleteUpdateOptions": {
+      "status": "unaudited"
+    },
+    "./composables#BMapClient": {
+      "status": "unaudited"
+    },
+    "./composables#BMapDriver": {
+      "status": "unaudited"
+    },
+    "./composables#BMapDrivingRouteOptions": {
+      "status": "unaudited"
+    },
+    "./composables#BMapEngine": {
+      "status": "unaudited"
+    },
+    "./composables#BMapGeoResult": {
+      "status": "unaudited"
+    },
+    "./composables#BMapGeolocationOptions": {
+      "status": "unaudited"
+    },
+    "./composables#BMapIpLocationResult": {
+      "status": "unaudited"
+    },
+    "./composables#BMapLocalSearchOperation": {
+      "status": "unaudited"
+    },
+    "./composables#BMapLocalSearchOptions": {
+      "status": "unaudited"
+    },
+    "./composables#BMapLocalSearchRenderOptions": {
+      "status": "unaudited"
+    },
+    "./composables#BMapRidingRouteOptions": {
+      "status": "unaudited"
+    },
+    "./composables#BMapRouteLocation": {
+      "status": "unaudited"
+    },
+    "./composables#BMapRouteRenderOptions": {
+      "status": "unaudited"
+    },
+    "./composables#BMapServiceStatus": {
+      "status": "unaudited"
+    },
+    "./composables#BMapTransitRouteOptions": {
+      "status": "unaudited"
+    },
+    "./composables#BMapWalkingRouteOptions": {
+      "status": "unaudited"
+    },
+    "./composables#Bounds": {
+      "status": "unaudited"
+    },
+    "./composables#BuiltinMarkerIconName": {
+      "status": "unaudited"
+    },
+    "./composables#Capability": {
+      "status": "unaudited"
+    },
+    "./composables#CapabilityDescriptor": {
+      "status": "unaudited"
+    },
+    "./composables#CapabilityExplanation": {
+      "status": "unaudited"
+    },
+    "./composables#CapabilityFamily": {
+      "status": "unaudited"
+    },
+    "./composables#CapabilityReason": {
+      "status": "unaudited"
+    },
+    "./composables#CapabilityRegistry": {
+      "status": "unaudited"
+    },
+    "./composables#CapabilityStatus": {
+      "status": "unaudited"
+    },
+    "./composables#CircleHandle": {
+      "status": "unaudited"
+    },
+    "./composables#CircleReadBackApi": {
+      "status": "unaudited"
+    },
+    "./composables#CityListCommandApi": {
+      "status": "unaudited"
+    },
+    "./composables#ContextMenuCommandApi": {
+      "status": "unaudited"
+    },
+    "./composables#ControlDriver": {
+      "status": "unaudited"
+    },
+    "./composables#ControlHandle": {
+      "status": "unaudited"
+    },
+    "./composables#ControlKind": {
+      "status": "unaudited"
+    },
+    "./composables#ControlOptionStatus": {
+      "status": "unaudited"
+    },
+    "./composables#ControlOptions": {
+      "status": "unaudited"
+    },
+    "./composables#ControllableMode": {
+      "status": "unaudited"
+    },
+    "./composables#ControllableState": {
+      "status": "unaudited"
+    },
+    "./composables#CoordinatesFromType": {
+      "status": "unaudited"
+    },
+    "./composables#CoordinatesToType": {
+      "status": "unaudited"
+    },
+    "./composables#CopyrightEntry": {
+      "status": "unaudited"
+    },
+    "./composables#CustomOverlayOptions": {
+      "status": "unaudited"
+    },
+    "./composables#DriverEvent": {
+      "status": "unaudited"
+    },
+    "./composables#DrivingPolicy": {
+      "status": "unaudited"
+    },
+    "./composables#DrivingRouteEndpoint": {
+      "status": "unaudited"
+    },
+    "./composables#DrivingRouteOptions": {
+      "status": "unaudited"
+    },
+    "./composables#DrivingRouteResult": {
+      "status": "unaudited"
+    },
+    "./composables#EqualFn": {
+      "status": "unaudited"
+    },
+    "./composables#EventDriver": {
+      "status": "unaudited"
+    },
+    "./composables#EventSourceClient": {
+      "status": "unaudited"
+    },
+    "./composables#FlyToOptions": {
+      "status": "unaudited"
+    },
+    "./composables#FrameScheduler": {
+      "status": "unaudited"
+    },
+    "./composables#GeoPoint": {
+      "status": "unaudited"
+    },
+    "./composables#GeocodeDetailAddressComponents": {
+      "status": "unaudited"
+    },
+    "./composables#GeocodeDetailItemResult": {
+      "status": "unaudited"
+    },
+    "./composables#GeocodeDetailLocationOptions": {
+      "status": "fixed",
+      "note": "#210 `d9304f5`：新增并导出该选项类型"
+    },
+    "./composables#GeocodeDetailResult": {
+      "status": "unaudited"
+    },
+    "./composables#GeocodeItemResult": {
+      "status": "unaudited"
+    },
+    "./composables#GeolocationAddressInfo": {
+      "status": "unaudited"
+    },
+    "./composables#GeolocationOptions": {
+      "status": "unaudited"
+    },
+    "./composables#GeometryDriver": {
+      "status": "unaudited"
+    },
+    "./composables#InfoWindowHandle": {
+      "status": "unaudited"
+    },
+    "./composables#InfoWindowOptions": {
+      "status": "unaudited"
+    },
+    "./composables#InfoWindowReadBackApi": {
+      "status": "unaudited"
+    },
+    "./composables#InitialMapOptions": {
+      "status": "unaudited"
+    },
+    "./composables#IntercityPolicy": {
+      "status": "unaudited"
+    },
+    "./composables#LabelHandle": {
+      "status": "unaudited"
+    },
+    "./composables#LabelOptions": {
+      "status": "unaudited"
+    },
+    "./composables#LayerCreateOptions": {
+      "status": "unaudited"
+    },
+    "./composables#LayerCtorSlot": {
+      "status": "unaudited"
+    },
+    "./composables#LayerData": {
+      "status": "unaudited"
+    },
+    "./composables#LayerDriver": {
+      "status": "unaudited"
+    },
+    "./composables#LayerHandle": {
+      "status": "unaudited"
+    },
+    "./composables#LayerKind": {
+      "status": "unaudited"
+    },
+    "./composables#LayerOperation": {
+      "status": "unaudited"
+    },
+    "./composables#LayerSurface": {
+      "status": "unaudited"
+    },
+    "./composables#LocalSearchBounds": {
+      "status": "unaudited"
+    },
+    "./composables#LocalSearchInBoundsRequest": {
+      "status": "unaudited"
+    },
+    "./composables#LocalSearchKeyword": {
+      "status": "unaudited"
+    },
+    "./composables#LocalSearchLocation": {
+      "status": "unaudited"
+    },
+    "./composables#LocalSearchNearbyRequest": {
+      "status": "unaudited"
+    },
+    "./composables#LocalSearchOptions": {
+      "status": "unaudited"
+    },
+    "./composables#LocalSearchPoi": {
+      "status": "unaudited"
+    },
+    "./composables#LocalSearchRenderOptions": {
+      "status": "unaudited"
+    },
+    "./composables#LocalSearchResult": {
+      "status": "unaudited"
+    },
+    "./composables#LocalSearchSearchOption": {
+      "status": "unaudited"
+    },
+    "./composables#LocationAddressComponents": {
+      "status": "unaudited"
+    },
+    "./composables#LocationCommandApi": {
+      "status": "unaudited"
+    },
+    "./composables#MAP_EVENT_CATALOG": {
+      "status": "unaudited"
+    },
+    "./composables#MapDriver": {
+      "status": "unaudited"
+    },
+    "./composables#MapEventEmits": {
+      "status": "unaudited"
+    },
+    "./composables#MapEventHandler": {
+      "status": "unaudited"
+    },
+    "./composables#MapEventMap": {
+      "status": "unaudited"
+    },
+    "./composables#MapEventName": {
+      "status": "unaudited"
+    },
+    "./composables#MapEventPayload": {
+      "status": "unaudited"
+    },
+    "./composables#MapEventPayloadForName": {
+      "status": "unaudited"
+    },
+    "./composables#MapEventPayloadOf": {
+      "status": "unaudited"
+    },
+    "./composables#MapEventSource": {
+      "status": "unaudited"
+    },
+    "./composables#MapEventSourceInput": {
+      "status": "unaudited"
+    },
+    "./composables#MapHandle": {
+      "status": "unaudited"
+    },
+    "./composables#MapInteraction": {
+      "status": "unaudited"
+    },
+    "./composables#MapLoadEvent": {
+      "status": "unaudited"
+    },
+    "./composables#MapLoadPayload": {
+      "status": "unaudited"
+    },
+    "./composables#MapMouseEvent": {
+      "status": "unaudited"
+    },
+    "./composables#MapPointerEvent": {
+      "status": "unaudited"
+    },
+    "./composables#MapReadyContext": {
+      "status": "unaudited"
+    },
+    "./composables#MapResizeEvent": {
+      "status": "unaudited"
+    },
+    "./composables#MapResizePayload": {
+      "status": "unaudited"
+    },
+    "./composables#MapStatus": {
+      "status": "unaudited"
+    },
+    "./composables#MapStatusRefs": {
+      "status": "unaudited"
+    },
+    "./composables#MapStyleInput": {
+      "status": "unaudited"
+    },
+    "./composables#MapType": {
+      "status": "unaudited"
+    },
+    "./composables#MapTypeChangeEvent": {
+      "status": "unaudited"
+    },
+    "./composables#MapTypeChangePayload": {
+      "status": "unaudited"
+    },
+    "./composables#MapView": {
+      "status": "unaudited"
+    },
+    "./composables#MarkerHandle": {
+      "status": "unaudited"
+    },
+    "./composables#MarkerIconInput": {
+      "status": "unaudited"
+    },
+    "./composables#MarkerIconName": {
+      "status": "unaudited"
+    },
+    "./composables#MarkerLabelInput": {
+      "status": "unaudited"
+    },
+    "./composables#MarkerOptions": {
+      "status": "unaudited"
+    },
+    "./composables#MarkerReadBackApi": {
+      "status": "unaudited"
+    },
+    "./composables#MenuItemView": {
+      "status": "unaudited"
+    },
+    "./composables#NativeLayerFeatureKeys": {
+      "status": "unaudited"
+    },
+    "./composables#NativeLayerFeatureState": {
+      "status": "unaudited"
+    },
+    "./composables#NativeLayerFeatureStateMap": {
+      "status": "unaudited"
+    },
+    "./composables#OverlayAnchorName": {
+      "status": "unaudited"
+    },
+    "./composables#OverlayDriver": {
+      "status": "unaudited"
+    },
+    "./composables#OverlayHandle": {
+      "status": "unaudited"
+    },
+    "./composables#OverlayPropertyPolicy": {
+      "status": "unaudited"
+    },
+    "./composables#OverlayTarget": {
+      "status": "unaudited"
+    },
+    "./composables#PanToOptions": {
+      "status": "unaudited"
+    },
+    "./composables#PanoramaDataInfo": {
+      "status": "unaudited"
+    },
+    "./composables#PanoramaDriver": {
+      "status": "unaudited"
+    },
+    "./composables#PanoramaLink": {
+      "status": "unaudited"
+    },
+    "./composables#PathOptions": {
+      "status": "unaudited"
+    },
+    "./composables#PathReadBackApi": {
+      "status": "unaudited"
+    },
+    "./composables#Pixel": {
+      "status": "unaudited"
+    },
+    "./composables#Point": {
+      "status": "unaudited"
+    },
+    "./composables#PolygonHandle": {
+      "status": "unaudited"
+    },
+    "./composables#PolylineHandle": {
+      "status": "unaudited"
+    },
+    "./composables#PublicBMapClient": {
+      "status": "unaudited"
+    },
+    "./composables#PublicMapContext": {
+      "status": "unaudited"
+    },
+    "./composables#RidingRouteOptions": {
+      "status": "unaudited"
+    },
+    "./composables#RidingRouteResult": {
+      "status": "unaudited"
+    },
+    "./composables#RouteEndpoint": {
+      "status": "unaudited"
+    },
+    "./composables#RouteEndpointInfo": {
+      "status": "unaudited"
+    },
+    "./composables#RouteEndpointPoi": {
+      "status": "unaudited"
+    },
+    "./composables#RouteLeg": {
+      "status": "unaudited"
+    },
+    "./composables#RoutePlan": {
+      "status": "unaudited"
+    },
+    "./composables#RouteRenderOptions": {
+      "status": "unaudited"
+    },
+    "./composables#RouteRenderState": {
+      "status": "unaudited"
+    },
+    "./composables#RouteResult": {
+      "status": "unaudited"
+    },
+    "./composables#RouteState": {
+      "status": "unaudited"
+    },
+    "./composables#RouteStep": {
+      "status": "unaudited"
+    },
+    "./composables#RouteTaxiFare": {
+      "status": "unaudited"
+    },
+    "./composables#RouteTaxiFareDetail": {
+      "status": "unaudited"
+    },
+    "./composables#SdkHandle": {
+      "status": "unaudited"
+    },
+    "./composables#ServiceCallStatus": {
+      "status": "unaudited"
+    },
+    "./composables#ServiceDriver": {
+      "status": "unaudited"
+    },
+    "./composables#ServiceErrorInfo": {
+      "status": "unaudited"
+    },
+    "./composables#ServiceHandle": {
+      "status": "unaudited"
+    },
+    "./composables#ServiceResult": {
+      "status": "unaudited"
+    },
+    "./composables#SetZoomOptions": {
+      "status": "unaudited"
+    },
+    "./composables#Size": {
+      "status": "unaudited"
+    },
+    "./composables#TransitLineSegment": {
+      "status": "unaudited"
+    },
+    "./composables#TransitPolicy": {
+      "status": "unaudited"
+    },
+    "./composables#TransitRouteOptions": {
+      "status": "unaudited"
+    },
+    "./composables#TransitRoutePlan": {
+      "status": "unaudited"
+    },
+    "./composables#TransitRouteResult": {
+      "status": "unaudited"
+    },
+    "./composables#TransitRouteSegment": {
+      "status": "unaudited"
+    },
+    "./composables#TransitVehiclePolicy": {
+      "status": "unaudited"
+    },
+    "./composables#TransitWalkSegment": {
+      "status": "unaudited"
+    },
+    "./composables#UseControllableStateOptions": {
+      "status": "unaudited"
+    },
+    "./composables#UseMapEventOptions": {
+      "status": "unaudited"
+    },
+    "./composables#UseMapStatusOptions": {
+      "status": "unaudited"
+    },
+    "./composables#UseViewAnimationOptions": {
+      "status": "unaudited"
+    },
+    "./composables#UseViewAnimationReturn": {
+      "status": "unaudited"
+    },
+    "./composables#ViewAnimationCancelOutcome": {
+      "status": "unaudited"
+    },
+    "./composables#ViewAnimationKeyFrames": {
+      "status": "unaudited"
+    },
+    "./composables#ViewAnimationStatus": {
+      "status": "unaudited"
+    },
+    "./composables#ViewCommandOptions": {
+      "status": "unaudited"
+    },
+    "./composables#Viewport": {
+      "status": "unaudited"
+    },
+    "./composables#ViewportOptions": {
+      "status": "unaudited"
+    },
+    "./composables#WalkingRouteOptions": {
+      "status": "unaudited"
+    },
+    "./composables#WalkingRouteResult": {
+      "status": "unaudited"
+    },
+    "./composables#resolveMapContext": {
+      "status": "unaudited"
+    },
+    "./composables#useAreaBoundary": {
+      "status": "fixed",
+      "note": "#211 `85720cc`：补上官方 Boundary#parsebdStr 出口"
+    },
+    "./composables#useControllableState": {
+      "status": "unaudited"
+    },
+    "./composables#useConvertor": {
+      "status": "unaudited"
+    },
+    "./composables#useDrivingRoute": {
+      "status": "unaudited"
+    },
+    "./composables#useGeocodeDetail": {
+      "status": "fixed",
+      "note": "#210 `d9304f5`：补上官方 LocationOptions"
+    },
+    "./composables#useGeocoder": {
+      "status": "deferred",
+      "note": "同上"
+    },
+    "./composables#useGeolocation": {
+      "status": "deferred",
+      "note": "同上"
+    },
+    "./composables#useIpLocation": {
+      "status": "deferred",
+      "note": "同上（审计表 MISSING）"
+    },
+    "./composables#useLocalSearch": {
+      "status": "fixed",
+      "note": "#212 `cf8efb9` + #214 `0157709`：同上"
+    },
+    "./composables#useMap": {
+      "status": "unaudited"
+    },
+    "./composables#useMapContext": {
+      "status": "unaudited"
+    },
+    "./composables#useMapEvent": {
+      "status": "unaudited"
+    },
+    "./composables#useMapReady": {
+      "status": "unaudited"
+    },
+    "./composables#useMapStatus": {
+      "status": "unaudited"
+    },
+    "./composables#useMarkerIcons": {
+      "status": "unaudited"
+    },
+    "./composables#usePanoramaService": {
+      "status": "unaudited"
+    },
+    "./composables#useRidingRoute": {
+      "status": "unaudited"
+    },
+    "./composables#useTransitRoute": {
+      "status": "unaudited"
+    },
+    "./composables#useViewAnimation": {
+      "status": "unaudited"
+    },
+    "./composables#useWalkingRoute": {
+      "status": "unaudited"
+    },
+    "./plugins#AutocompleteOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#AutocompleteUpdateOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#BMapClient": {
+      "status": "unaudited"
+    },
+    "./plugins#BMapDriver": {
+      "status": "unaudited"
+    },
+    "./plugins#BMapDriverFactory": {
+      "status": "unaudited"
+    },
+    "./plugins#BMapDriverInput": {
+      "status": "unaudited"
+    },
+    "./plugins#BMapEngine": {
+      "status": "unaudited"
+    },
+    "./plugins#BMapError": {
+      "status": "unaudited"
+    },
+    "./plugins#BMapErrorCode": {
+      "status": "unaudited"
+    },
+    "./plugins#BMapErrorOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#BMapLoadOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#BMapPluginConfig": {
+      "status": "unaudited"
+    },
+    "./plugins#BMapPluginDefinition": {
+      "status": "unaudited"
+    },
+    "./plugins#BMapProviderLike": {
+      "status": "unaudited"
+    },
+    "./plugins#BUILTIN_PLUGIN_CATALOG": {
+      "status": "unaudited"
+    },
+    "./plugins#BUILTIN_PLUGIN_NAMES": {
+      "status": "unaudited"
+    },
+    "./plugins#BUILTIN_PLUGIN_URLS": {
+      "status": "unaudited"
+    },
+    "./plugins#Bounds": {
+      "status": "unaudited"
+    },
+    "./plugins#BuiltinPluginName": {
+      "status": "unaudited"
+    },
+    "./plugins#Capability": {
+      "status": "unaudited"
+    },
+    "./plugins#CapabilityDescriptor": {
+      "status": "unaudited"
+    },
+    "./plugins#CapabilityExplanation": {
+      "status": "unaudited"
+    },
+    "./plugins#CapabilityFamily": {
+      "status": "unaudited"
+    },
+    "./plugins#CapabilityReason": {
+      "status": "unaudited"
+    },
+    "./plugins#CapabilityRegistry": {
+      "status": "unaudited"
+    },
+    "./plugins#CapabilityStatus": {
+      "status": "unaudited"
+    },
+    "./plugins#CircleHandle": {
+      "status": "unaudited"
+    },
+    "./plugins#CircleReadBackApi": {
+      "status": "unaudited"
+    },
+    "./plugins#CityListCommandApi": {
+      "status": "unaudited"
+    },
+    "./plugins#ContextMenuCommandApi": {
+      "status": "unaudited"
+    },
+    "./plugins#ControlDriver": {
+      "status": "unaudited"
+    },
+    "./plugins#ControlHandle": {
+      "status": "unaudited"
+    },
+    "./plugins#ControlKind": {
+      "status": "unaudited"
+    },
+    "./plugins#ControlOptionStatus": {
+      "status": "unaudited"
+    },
+    "./plugins#ControlOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#CopyrightEntry": {
+      "status": "unaudited"
+    },
+    "./plugins#CreateBMapClientOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#CreateBMapPluginOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#CrossOriginValue": {
+      "status": "unaudited"
+    },
+    "./plugins#CustomOverlayOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#Disposer": {
+      "status": "unaudited"
+    },
+    "./plugins#DrivingPolicy": {
+      "status": "unaudited"
+    },
+    "./plugins#DrivingRouteOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#EventDriver": {
+      "status": "unaudited"
+    },
+    "./plugins#FlyToOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#GeometryDriver": {
+      "status": "unaudited"
+    },
+    "./plugins#InfoWindowHandle": {
+      "status": "unaudited"
+    },
+    "./plugins#InfoWindowOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#InfoWindowReadBackApi": {
+      "status": "unaudited"
+    },
+    "./plugins#InitialMapOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#IntercityPolicy": {
+      "status": "unaudited"
+    },
+    "./plugins#JsapiV4Engine": {
+      "status": "unaudited"
+    },
+    "./plugins#JsapiV4LoadMetadata": {
+      "status": "unaudited"
+    },
+    "./plugins#JsapiV4LoadMode": {
+      "status": "unaudited"
+    },
+    "./plugins#JsapiV4Namespace": {
+      "status": "unaudited"
+    },
+    "./plugins#JsapiV4ProviderId": {
+      "status": "unaudited"
+    },
+    "./plugins#JsapiV4ScriptMode": {
+      "status": "unaudited"
+    },
+    "./plugins#JsapiV4VersionSource": {
+      "status": "unaudited"
+    },
+    "./plugins#LabelHandle": {
+      "status": "unaudited"
+    },
+    "./plugins#LabelOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#LayerCreateOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#LayerCtorSlot": {
+      "status": "unaudited"
+    },
+    "./plugins#LayerData": {
+      "status": "unaudited"
+    },
+    "./plugins#LayerDriver": {
+      "status": "unaudited"
+    },
+    "./plugins#LayerHandle": {
+      "status": "unaudited"
+    },
+    "./plugins#LayerKind": {
+      "status": "unaudited"
+    },
+    "./plugins#LayerOperation": {
+      "status": "unaudited"
+    },
+    "./plugins#LayerSurface": {
+      "status": "unaudited"
+    },
+    "./plugins#LoadedJsapiV4": {
+      "status": "unaudited"
+    },
+    "./plugins#LocalSearchOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#LocalSearchRenderOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#LocationAddressComponents": {
+      "status": "unaudited"
+    },
+    "./plugins#LocationCommandApi": {
+      "status": "unaudited"
+    },
+    "./plugins#MapDriver": {
+      "status": "unaudited"
+    },
+    "./plugins#MapHandle": {
+      "status": "unaudited"
+    },
+    "./plugins#MapInteraction": {
+      "status": "unaudited"
+    },
+    "./plugins#MapStyleInput": {
+      "status": "unaudited"
+    },
+    "./plugins#MapType": {
+      "status": "unaudited"
+    },
+    "./plugins#MapView": {
+      "status": "unaudited"
+    },
+    "./plugins#MarkerHandle": {
+      "status": "unaudited"
+    },
+    "./plugins#MarkerIconInput": {
+      "status": "unaudited"
+    },
+    "./plugins#MarkerLabelInput": {
+      "status": "unaudited"
+    },
+    "./plugins#MarkerOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#MarkerReadBackApi": {
+      "status": "unaudited"
+    },
+    "./plugins#MenuItemView": {
+      "status": "unaudited"
+    },
+    "./plugins#NativeLayerFeatureKeys": {
+      "status": "unaudited"
+    },
+    "./plugins#NativeLayerFeatureState": {
+      "status": "unaudited"
+    },
+    "./plugins#NativeLayerFeatureStateMap": {
+      "status": "unaudited"
+    },
+    "./plugins#OverlayAnchorName": {
+      "status": "unaudited"
+    },
+    "./plugins#OverlayDriver": {
+      "status": "unaudited"
+    },
+    "./plugins#OverlayHandle": {
+      "status": "unaudited"
+    },
+    "./plugins#OverlayPropertyPolicy": {
+      "status": "unaudited"
+    },
+    "./plugins#OverlayTarget": {
+      "status": "unaudited"
+    },
+    "./plugins#PLUGIN_COMPAT_BY_ID": {
+      "status": "unaudited"
+    },
+    "./plugins#PLUGIN_COMPAT_INVENTORY": {
+      "status": "unaudited"
+    },
+    "./plugins#PLUGIN_EVIDENCE_BASIS_MEANING": {
+      "status": "unaudited"
+    },
+    "./plugins#PLUGIN_VERDICTS": {
+      "status": "unaudited"
+    },
+    "./plugins#PLUGIN_VERDICT_MEANING": {
+      "status": "unaudited"
+    },
+    "./plugins#PanToOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#PanoramaDriver": {
+      "status": "unaudited"
+    },
+    "./plugins#PanoramaLink": {
+      "status": "unaudited"
+    },
+    "./plugins#PathOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#PathReadBackApi": {
+      "status": "unaudited"
+    },
+    "./plugins#Pixel": {
+      "status": "unaudited"
+    },
+    "./plugins#PluginCatalogEntry": {
+      "status": "unaudited"
+    },
+    "./plugins#PluginCompatEntry": {
+      "status": "unaudited"
+    },
+    "./plugins#PluginContext": {
+      "status": "unaudited"
+    },
+    "./plugins#PluginEvidenceBasis": {
+      "status": "unaudited"
+    },
+    "./plugins#PluginHost": {
+      "status": "unaudited"
+    },
+    "./plugins#PluginHostEntryInspection": {
+      "status": "unaudited"
+    },
+    "./plugins#PluginHostEntryStatus": {
+      "status": "unaudited"
+    },
+    "./plugins#PluginMigrationPath": {
+      "status": "unaudited"
+    },
+    "./plugins#PluginRuntimeReading": {
+      "status": "unaudited"
+    },
+    "./plugins#PluginScope": {
+      "status": "unaudited"
+    },
+    "./plugins#PluginUrlKey": {
+      "status": "unaudited"
+    },
+    "./plugins#PluginVerdict": {
+      "status": "unaudited"
+    },
+    "./plugins#PluginVersionLock": {
+      "status": "unaudited"
+    },
+    "./plugins#Point": {
+      "status": "unaudited"
+    },
+    "./plugins#PolygonHandle": {
+      "status": "unaudited"
+    },
+    "./plugins#PolylineHandle": {
+      "status": "unaudited"
+    },
+    "./plugins#RidingRouteOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#RouteRenderOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#RouteRenderState": {
+      "status": "unaudited"
+    },
+    "./plugins#RouteState": {
+      "status": "unaudited"
+    },
+    "./plugins#SdkHandle": {
+      "status": "unaudited"
+    },
+    "./plugins#ServiceDriver": {
+      "status": "unaudited"
+    },
+    "./plugins#ServiceHandle": {
+      "status": "unaudited"
+    },
+    "./plugins#SetZoomOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#Size": {
+      "status": "unaudited"
+    },
+    "./plugins#TransitPolicy": {
+      "status": "unaudited"
+    },
+    "./plugins#TransitRouteOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#TransitVehiclePolicy": {
+      "status": "unaudited"
+    },
+    "./plugins#UnsupportedBehavior": {
+      "status": "unaudited"
+    },
+    "./plugins#ViewAnimationCancelOutcome": {
+      "status": "unaudited"
+    },
+    "./plugins#ViewCommandOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#Viewport": {
+      "status": "unaudited"
+    },
+    "./plugins#ViewportOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#WalkingRouteOptions": {
+      "status": "unaudited"
+    },
+    "./plugins#bmapConfigKey": {
+      "status": "unaudited"
+    },
+    "./plugins#createBMapPlugin": {
+      "status": "unaudited"
+    },
+    "./plugins#createPluginHost": {
+      "status": "unaudited"
+    },
+    "./plugins#disposeDefaultPluginHost": {
+      "status": "unaudited"
+    },
+    "./plugins#drawingManagerPlugin": {
+      "status": "unaudited"
+    },
+    "./plugins#geoUtilsPlugin": {
+      "status": "unaudited"
+    },
+    "./plugins#getDefaultPluginHost": {
+      "status": "unaudited"
+    },
+    "./plugins#mapVglPlugin": {
+      "status": "unaudited"
+    },
+    "./plugins#resolvePluginDefinition": {
+      "status": "unaudited"
+    },
+    "./plugins#stringToPluginDefinitions": {
+      "status": "unaudited"
+    },
+    "./plugins#trackAnimationPlugin": {
+      "status": "unaudited"
+    },
+    "./plugins#urlPluginDefinition": {
+      "status": "unaudited"
+    },
+    "./resolver#BMapResolver": {
+      "status": "unaudited"
+    },
+    "./resolver#ComponentResolverLike": {
+      "status": "unaudited"
+    },
+    "./ui-kit#BMapError": {
+      "status": "unaudited"
+    },
+    "./ui-kit#BMapErrorCode": {
+      "status": "unaudited"
+    },
+    "./ui-kit#BMapErrorOptions": {
+      "status": "unaudited"
+    },
+    "./ui-kit#PlaceAutocomplete": {
+      "status": "unaudited"
+    },
+    "./ui-kit#PlaceAutocompleteDisplayDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#PlaceAutocompleteExpose": {
+      "status": "unaudited"
+    },
+    "./ui-kit#PlaceAutocompleteProps": {
+      "status": "unaudited"
+    },
+    "./ui-kit#PlaceBoundsDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#PlaceDetail": {
+      "status": "unaudited"
+    },
+    "./ui-kit#PlaceDetailDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#PlaceDetailDisplayDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#PlaceDetailExpose": {
+      "status": "unaudited"
+    },
+    "./ui-kit#PlaceDetailPlaceInput": {
+      "status": "unaudited"
+    },
+    "./ui-kit#PlaceDetailPlaceObject": {
+      "status": "unaudited"
+    },
+    "./ui-kit#PlaceDetailProps": {
+      "status": "unaudited"
+    },
+    "./ui-kit#PlaceHighlightChangeDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#PlaceHighlightDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#PlacePoiDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#PlacePointDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#PlaceSearch": {
+      "status": "unaudited"
+    },
+    "./ui-kit#PlaceSearchDisplayDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#PlaceSearchExpose": {
+      "status": "unaudited"
+    },
+    "./ui-kit#PlaceSearchProps": {
+      "status": "unaudited"
+    },
+    "./ui-kit#PlaceSuggestionDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RouteDriveSegmentDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RoutePlan": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RoutePlanDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RoutePlanDrivingOptionsDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RoutePlanDrivingPolicy": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RoutePlanEndpointInput": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RoutePlanExpose": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RoutePlanMode": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RoutePlanNavClickDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RoutePlanPlanSelectDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RoutePlanProps": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RoutePlanResultDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RoutePlanSearchOptionsDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RoutePlanTypeChangeDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RoutePointDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RouteRidingSegmentDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RouteSegmentBaseDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RouteSegmentDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RouteSegmentType": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RouteTransitSegmentDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RouteTransitSubType": {
+      "status": "unaudited"
+    },
+    "./ui-kit#RouteWalkSegmentDTO": {
+      "status": "unaudited"
+    },
+    "./ui-kit#UI_KIT_PACKAGE": {
+      "status": "unaudited"
+    },
+    "./ui-kit#UI_KIT_STYLE_PATH": {
+      "status": "unaudited"
+    },
+    "./ui-kit#UiKitAutocompleteWidget": {
+      "status": "unaudited"
+    },
+    "./ui-kit#UiKitModule": {
+      "status": "unaudited"
+    },
+    "./ui-kit#UiKitPlaceDetailWidget": {
+      "status": "unaudited"
+    },
+    "./ui-kit#UiKitRoutePlanWidget": {
+      "status": "unaudited"
+    },
+    "./ui-kit#UiKitSearchWidget": {
+      "status": "unaudited"
+    },
+    "./ui-kit#UiKitSubscription": {
+      "status": "unaudited"
+    },
+    "./ui-kit#UiKitWidgetHandle": {
+      "status": "unaudited"
+    },
+    "./ui-kit#UiKitWidgetOptions": {
+      "status": "unaudited"
+    },
+    "./ui-kit#UiKitWidgetStatus": {
+      "status": "unaudited"
+    },
+    "./ui-kit#UseUiKitWidgetOptions": {
+      "status": "unaudited"
+    },
+    "./ui-kit#UseUiKitWidgetResult": {
+      "status": "unaudited"
+    },
+    "./ui-kit#isUiKitLoaded": {
+      "status": "unaudited"
+    },
+    "./ui-kit#loadUiKit": {
+      "status": "unaudited"
+    },
+    "./ui-kit#useUiKitWidget": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Autocomplete": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.BMapProvider": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.BezierCurve": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Circle": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.CityListControl": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.ContextMenu": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.CopyrightControl": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.CustomControl": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.CustomOverlay": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.DOMLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.DistrictLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.FillLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.GeoJSONLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.GroundOverlay": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.GroundPoint": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.HeatmapLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.InfoWindow": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Label": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.LineLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.LocationControl": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.MVTLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Map": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.MapMask": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.MapTypeControl": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Marker": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Marker3D": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.MarkerCluster": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.MarkerList": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.MenuItem": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.MenuSeparator": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.NavigationControl": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.NavigationControl3D": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.OverviewMapControl": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Panorama": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.PanoramaControl": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.PanoramaCoverageLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.PanoramaLabel": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.PointCollection": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.PointIconLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.PointLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Polygon": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.PolygonLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Polyline": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.PolylineLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Prism": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.RasterTileLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.Rectangle": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.ScaleControl": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.TextLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.TileLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.TrackLineLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.TrafficLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.WMSLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.WMTSLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.XYZLayer": {
+      "status": "unaudited"
+    },
+    "./volar#@vue/runtime-core.GlobalComponents.ZoomControl": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents": {
+      "status": "retained",
+      "note": "生成的全局组件增强；成员级清单由本记录覆盖（#215 第二轮评审 P1 后纳入）"
+    },
+    "./volar#vue.GlobalComponents.Autocomplete": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.BMapProvider": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.BezierCurve": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.Circle": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.CityListControl": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.ContextMenu": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.CopyrightControl": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.CustomControl": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.CustomOverlay": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.DOMLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.DistrictLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.FillLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.GeoJSONLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.GroundOverlay": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.GroundPoint": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.HeatmapLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.InfoWindow": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.Label": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.LineLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.LocationControl": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.MVTLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.Map": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.MapMask": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.MapTypeControl": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.Marker": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.Marker3D": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.MarkerCluster": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.MarkerList": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.MenuItem": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.MenuSeparator": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.NavigationControl": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.NavigationControl3D": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.OverviewMapControl": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.Panorama": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.PanoramaControl": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.PanoramaCoverageLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.PanoramaLabel": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.PointCollection": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.PointIconLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.PointLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.Polygon": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.PolygonLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.Polyline": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.PolylineLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.Prism": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.RasterTileLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.Rectangle": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.ScaleControl": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.TextLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.TileLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.TrackLineLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.TrafficLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.WMSLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.WMTSLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.XYZLayer": {
+      "status": "unaudited"
+    },
+    "./volar#vue.GlobalComponents.ZoomControl": {
+      "status": "unaudited"
+    }
+  }
+}
