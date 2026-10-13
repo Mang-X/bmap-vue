@@ -32,11 +32,19 @@ export default defineConfig({
 
 <script setup lang="ts">
 // 不用 import { Map, Marker, NavigationControl } from '@mangax/bmap-vue'
+// 但 `ref` 这类 Vue API 仍要自己 import —— unplugin-vue-components 只自动导入**组件**。
+import { ref } from 'vue'
 const center = ref({ lng: 116.404, lat: 39.915 })
 </script>
 ```
 
-Nuxt 用 `unplugin-vue-components` 的 [`@nuxtjs/components`](https://github.com/unplugin/unplugin-vue-components#nuxt)，Vite 用上面的写法。
+> 想让 `ref()` 这类 Vue API 也免 import，可以**同时**加 `unplugin-auto-import` 的
+> `AutoImport({ imports: ['vue'] })` —— 它负责 Vue API，`unplugin-vue-components` 负责组件，
+> 两者互补。注意 `unplugin-auto-import` 默认不处理 `<template>`（`vueTemplate: false`），
+> 所以模板里的组件自动导入仍然靠 `unplugin-vue-components`，不要指望前者。
+
+Nuxt 不在本页范围：Nuxt 3/4 自带的组件自动导入只扫 `components/` 目录，**不会**自动识别本
+resolver；在 Nuxt 里接入需要自己写一层 Nuxt 模块（`@nuxt/kit` 的 `addComponent`）。
 
 > **用 `unplugin-auto-import` 的话要额外开 `vueTemplate`。** 它默认 `vueTemplate: false`，不会处理
 > `<template>` 里的标签 —— 只配 `AutoImport({ resolvers: [BMapResolver()] })` 并**不会**让

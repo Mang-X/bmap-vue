@@ -30,14 +30,20 @@ Components({ resolvers: [BMapResolver()] })
 
 ## 判别力
 
-新增 `tests/behavior/resolver-consumer-contract.test.ts`：用**真实插件的类型声明**
-（`unplugin-vue-components`，devDependency）编译 `Components({ resolvers: [BMapResolver()] })`，
-要求**零诊断**；再配一条**反例**——把 `type` 写回可选、放在同一位置，**必须报错**。
+两侧都加了证据：
+
+- **单测**（`tests/behavior/resolver-consumer-contract.test.ts`）：用真实插件的类型声明编译
+  `Components({ resolvers: [BMapResolver()] })`，要求零诊断；再配一条**反例**——把 `type`
+  写回可选、放同一位置，**必须报错**。
+- **消费端 fixture**（`fixtures/consumer/src/resolver.ts` + `unplugin-vue-components` 作 fixture
+  devDependency）：走**发布包**（`bmap-vue/resolver` 子入口 → tarball 的
+  `exports["./resolver"].types`）由 `verify:package` 的 `vue-tsc` 编译。单测对着 `src` 编译，
+  抓不到 `dist/resolver.d.ts` 或 exports 的 `types` 回归；这条补上那一面。
 
 突变验证：把 `type` 改回 `type?` ⇒ 正证用例翻红；恢复 ⇒ 通过。也就是说这条探针在修复前
 **确实会报错**，不是恒真的空测试。
 
 ## 依赖
 
-`unplugin-vue-components` 只作 **devDependency**（消费端类型探针用），不进 `peerDependencies`、
-不进运行期。
+`unplugin-vue-components` 只作 **devDependency**（根：单测用；`fixtures/consumer`：消费端探针用），
+不进 `peerDependencies`、不进运行期。
