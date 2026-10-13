@@ -9,7 +9,7 @@
 ```ts
 export declare function BMapResolver(): ComponentResolverLike;
 export declare interface ComponentResolverLike {
-    type?: "component" | "directive";
+    type: "component" | "directive";
     resolve: (name: string) => {
         name: string;
         from: string;

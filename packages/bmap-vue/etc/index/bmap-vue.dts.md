@@ -1972,7 +1972,7 @@ export declare type ClusterPointIconSource = string | HTMLCanvasElement | {
     id?: string | number;
 };
 declare interface ComponentResolverLike {
-    type?: "component" | "directive";
+    type: "component" | "directive";
     resolve: (name: string) => {
         name: string;
         from: string;
