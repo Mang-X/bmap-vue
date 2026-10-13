@@ -56,7 +56,6 @@ function found(
   const input: CoverageEvaluationInput = {
     inventory,
     record: current,
-    listedNameCount: Object.values(inventory).reduce((n, names) => n + names.length, 0),
     base: { kind: "found", record: base, source: "test-base" },
   };
   return evaluateCoverage(input);
@@ -163,7 +162,18 @@ describe("evaluateCoverage · fail-closed 守卫", () => {
     const { problems } = evaluateCoverage({
       inventory: {},
       record: rec,
-      listedNameCount: 0,
+      base: { kind: "absent", source: "test" },
+    });
+    expect(problems.some((p) => p.includes("清单里的公开名为 0"))).toBe(true);
+  });
+
+  it("计数从 inventory 自身推导：空清单 + 非空记录也必红（不可由调用方参数绕过）", () => {
+    // 评审 P2 的复现：一旦计数是**另传**的参数，`inventory: {}` 配「计数>0」就能让这道守卫失效。
+    // 现在计数由 `inventory` 求出，空清单必然触发守卫。
+    const rec = record([[A, "retained", "依据"]], { unaudited: 0 });
+    const { problems } = evaluateCoverage({
+      inventory: {},
+      record: rec,
       base: { kind: "absent", source: "test" },
     });
     expect(problems.some((p) => p.includes("清单里的公开名为 0"))).toBe(true);
@@ -174,9 +184,52 @@ describe("evaluateCoverage · fail-closed 守卫", () => {
     const { problems } = evaluateCoverage({
       inventory: inventoryFrom(rec),
       record: rec,
-      listedNameCount: 1,
       base: { kind: "absent", source: "test" },
     });
     expect(problems).toEqual([]);
   });
+
+  it("base=unavailable 的弱判据：基线 ≠ 当前未核对数 ⇒ 红", () => {
+    // 取不到 base 时不允许「一比就过」——只接受「基线 = 当前未核对数」这种已收口形态。
+    const rec = record([[A, "unaudited"], [B, "unaudited"]], { unaudited: 1 });
+    const { problems } = evaluateCoverage({
+      inventory: inventoryFrom(rec),
+      record: rec,
+      base: { kind: "unavailable" },
+    });
+    expect(problems.some((p) => p.includes("取不到 base 版本的记录"))).toBe(true);
+  });
+
+  it("base=unavailable 且基线 = 当前未核对数 ⇒ 放行（弱判据的正面）", () => {
+    const rec = record([[A, "unaudited"], [B, "unaudited"]], { unaudited: 2 });
+    const { problems } = evaluateCoverage({
+      inventory: inventoryFrom(rec),
+      record: rec,
+      base: { kind: "unavailable" },
+    });
+    expect(problems).toEqual([]);
+  });
 });
+
+describe("evaluateCoverage · 清单与记录一一对应（missing / stale 在门禁装配层）", () => {
+  it("清单有、记录没有 ⇒ 红并点名该键（不只 helper 单测）", () => {
+    const rec = record([[A, "unaudited"]], { unaudited: 1 });
+    const { problems } = evaluateCoverage({
+      inventory: { ".": ["Alpha", "Beta"] }, // Beta 无记录
+      record: rec,
+      base: { kind: "absent", source: "test" },
+    });
+    expect(problems.some((p) => p.includes("没有任何处置记录") && p.includes(B))).toBe(true);
+  });
+
+  it("记录有、清单没有 ⇒ 红并点名陈旧键", () => {
+    const rec = record([[A, "unaudited"], [B, "retained", "依据"]], { unaudited: 1 });
+    const { problems } = evaluateCoverage({
+      inventory: { ".": ["Alpha"] }, // Beta 已不在清单里
+      record: rec,
+      base: { kind: "absent", source: "test" },
+    });
+    expect(problems.some((p) => p.includes("已不存在的导出") && p.includes(B))).toBe(true);
+  });
+});
+

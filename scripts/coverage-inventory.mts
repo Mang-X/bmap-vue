@@ -368,8 +368,6 @@ export interface CoverageEvaluationInput {
   readonly inventory: Record<string, readonly string[]>;
   /** 当前记录。 */
   readonly record: CoverageRecord;
-  /** 当前清单里的全部公开名（用于 fail-closed 守卫，不该传空）。 */
-  readonly listedNameCount: number;
   /** base 版本的判定结果：`found` 有上一版可比、`absent` 首次引入、`unavailable` 取不到。 */
   readonly base:
     | { readonly kind: "found"; readonly record: CoverageRecord; readonly source: string }
@@ -394,11 +392,17 @@ export interface CoverageEvaluation {
  * `check-165-coverage.mts` 只负责组装输入并调它，判据本身**只有这一处**实现。
  */
 export function evaluateCoverage(input: CoverageEvaluationInput): CoverageEvaluation {
-  const { inventory, record, listedNameCount, base } = input;
+  const { inventory, record, base } = input;
   const problems: string[] = [];
   const notes: string[] = [];
 
-  // fail-closed 守卫：清单为空时下面所有判据都会恒真（「没有名字要查」≠「全部查过了」）。
+  /**
+   * fail-closed 守卫：清单为空时下面所有判据都会恒真（「没有名字要查」≠「全部查过了」）。
+   *
+   * **从 `inventory` 自己求和**，不接受调用方另传一个计数：两个参数表示同一事实时，
+   * 不一致的输入（`inventory: {}` + 计数 1）会让这道守卫被绕过（#219 评审 P2 实测）。
+   */
+  const listedNameCount = Object.values(inventory).reduce((n, names) => n + names.length, 0);
   if (listedNameCount <= 0) {
     problems.push(
       "清单里的公开名为 0：无法把「没有名字要查」与「全部查过了」区分开，判据会恒真。" +

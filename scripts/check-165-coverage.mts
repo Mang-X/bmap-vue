@@ -36,7 +36,6 @@ const entryPoints = entryPointsFromManifest(pkg, distRoot);
 
 const inventory = inventoryOf(entryPoints);
 const record = readCoverageRecord(recordFile);
-const listedNameCount = Object.values(inventory).reduce((n, names) => n + names.length, 0);
 
 /**
  * 取 **base 版本**的记录。选源顺序刻意与 CI 触发场景对齐：
@@ -94,7 +93,7 @@ function baseRecord():
  * `tests/behavior/165-coverage-gate.test.ts` 直接驱动（#215 第六轮评审缺的那条全链路判据）。
  */
 const base = baseRecord();
-const evaluation = evaluateCoverage({ inventory, record, listedNameCount, base });
+const evaluation = evaluateCoverage({ inventory, record, base });
 for (const note of evaluation.notes) console.log(note);
 const problems = evaluation.problems;
 const counts = statusCounts(record);
