@@ -3283,12 +3283,12 @@
       "status": "unaudited"
     },
     "./resolver#BMapResolver": {
-      "status": "retained",
-      "note": "Class 4（Vue 工具链适配，非 SDK 能力）：官方 JSAPI 没有「自动组件导入」概念，本库为 unplugin-vue-components 提供 resolver，是让公开组件可在 Vue 模板里免 import 使用的必要适配。合法组件名从 manifest 单一事实源生成（ADR 2026-09-11-loaded-sdk-client-boundary 决策 8），不手工维护第二份。无官方对应项可对齐，故保留。"
+      "status": "deferred",
+      "note": "Class 4 方向（Vue 工具链适配，官方 JSAPI 无「自动组件导入」概念），但**当前不可用**：#220 评审 P1/P2 实测——文档用的 `unplugin-auto-import` 默认不处理模板（`vueTemplate: false`），且 `ComponentResolverLike.type` 声明为可选，无法赋给目标插件 `unplugin-vue-components` 的必填 `type`。另：note 原写「unplugin-vue-components 是可选 peer」不实，包未声明该 peer。待 #221 修类型 + 真实插件消费探针 + 改文档后转 fixed。"
     },
     "./resolver#ComponentResolverLike": {
-      "status": "retained",
-      "note": "Class 4（同上）：resolver 的最小结构化接口，为**避免强依赖** unplugin-vue-components 而自持（该包是可选 peer）。它是 BMapResolver 返回类型的组成部分，不是独立能力。"
+      "status": "deferred",
+      "note": "同上，待 #221：`type?: \"component\" | \"directive\"` 应为必填，否则 `Components({ resolvers: [BMapResolver()] })` 会被 TS 拒绝（运行时对象其实带 `type`）。现结构上是 BMapResolver 返回类型的组成部分，不是独立能力。"
     },
     "./ui-kit#BMapError": {
       "status": "unaudited"
