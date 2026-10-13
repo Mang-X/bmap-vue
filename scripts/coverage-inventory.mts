@@ -362,6 +362,134 @@ export function migrationIsFresh(
   return JSON.stringify(current) !== JSON.stringify(baseMigration ?? null);
 }
 
+/** 纯判定所需的一张记录来源（当前版 / base 版）。 */
+export interface CoverageEvaluationInput {
+  /** 从发布产物枚举出的清单：入口 → 该入口的公开名。 */
+  readonly inventory: Record<string, readonly string[]>;
+  /** 当前记录。 */
+  readonly record: CoverageRecord;
+  /** base 版本的判定结果：`found` 有上一版可比、`absent` 首次引入、`unavailable` 取不到。 */
+  readonly base:
+    | { readonly kind: "found"; readonly record: CoverageRecord; readonly source: string }
+    | { readonly kind: "absent"; readonly source: string }
+    | { readonly kind: "unavailable" };
+}
+
+/** 纯判定的结论：`problems` 非空即门禁失败；`notes` 是给日志的比较口径说明。 */
+export interface CoverageEvaluation {
+  readonly problems: readonly string[];
+  readonly notes: readonly string[];
+}
+
+/**
+ * #165 覆盖门禁的**纯判定**（无 I/O）。
+ *
+ * 把「取输入」（读清单 / 读记录 / 用 `git show` 取 base 记录 —— 全是 I/O）与「判定」分开，
+ * 是为了让 `base.kind === "found"` 这条**跨提交**路径能被测试**直接**驱动（#215 第六轮评审
+ * 指出的缺口：本 PR 首次引入记录，真实 CI 走的是 `base=absent`，②④⑤ 三条跨提交判据在 CI
+ * 里从未真正被执行过 —— 只比较单个判据的单测抓不到「判据在另一形态下恒真」那类失效）。
+ *
+ * `check-165-coverage.mts` 只负责组装输入并调它，判据本身**只有这一处**实现。
+ */
+export function evaluateCoverage(input: CoverageEvaluationInput): CoverageEvaluation {
+  const { inventory, record, base } = input;
+  const problems: string[] = [];
+  const notes: string[] = [];
+
+  /**
+   * fail-closed 守卫：清单为空时下面所有判据都会恒真（「没有名字要查」≠「全部查过了」）。
+   *
+   * **从 `inventory` 自己求和**，不接受调用方另传一个计数：两个参数表示同一事实时，
+   * 不一致的输入（`inventory: {}` + 计数 1）会让这道守卫被绕过（#219 评审 P2 实测）。
+   */
+  const listedNameCount = Object.values(inventory).reduce((n, names) => n + names.length, 0);
+  if (listedNameCount <= 0) {
+    problems.push(
+      "清单里的公开名为 0：无法把「没有名字要查」与「全部查过了」区分开，判据会恒真。" +
+        "先确认 build:package 产出了声明（清单来自 dist）。",
+    );
+  }
+
+  const { missing, stale } = coverageDrift(inventory, record);
+  if (missing.length > 0) {
+    problems.push(
+      `${missing.length} 个「入口#名字」没有任何处置记录（新增必须判定，不允许静默未核对）：` +
+        `${missing.slice(0, 10).join(", ")}${missing.length > 10 ? " …" : ""}`,
+    );
+  }
+  if (stale.length > 0) {
+    problems.push(
+      `${stale.length} 条记录指向已不存在的导出（陈旧记录不能冒充覆盖）：` +
+        `${stale.slice(0, 10).join(", ")}${stale.length > 10 ? " …" : ""}`,
+    );
+  }
+  const counts = statusCounts(record);
+  if (counts.unaudited > record.baseline.unaudited) {
+    problems.push(
+      `未核对数 ${counts.unaudited} 超过基线 ${record.baseline.unaudited}：基线只允许下降。`,
+    );
+  }
+
+  if (base.kind === "unavailable") {
+    // 取不到 base：不退化成一比就过，只接受「基线 = 当前未核对数」这种已收口形态。
+    if (record.baseline.unaudited !== counts.unaudited) {
+      problems.push(
+        `取不到 base 版本的记录（已尝试 GITHUB_BASE_SHA / origin/<base_ref> / GITHUB_BEFORE_SHA / HEAD^），` +
+          `且基线 ${record.baseline.unaudited} 与当前未核对数 ${counts.unaudited} 不一致：` +
+          `无法验证跨提交单调性时，只接受「基线 = 当前未核对数」这种已收口形态。`,
+      );
+    }
+    notes.push("[165-coverage] 取不到 base 版本的记录：退化为「基线必须等于当前未核对数」的弱判据");
+  } else if (base.kind === "absent") {
+    notes.push(`[165-coverage] base（${base.source}）里还没有这份记录：按首次引入处理，只比较文件内基线`);
+  } else {
+    // 基线允许在显式迁移时上涨一次；迁移必须**相对 base 是新的**，否则同一条声明可反复用。
+    const migration = record.baseline.migration;
+    const migrationFresh = migrationIsFresh(migration, base.record.baseline.migration);
+    const raised = record.baseline.unaudited > base.record.baseline.unaudited;
+    if (raised && !migrationFresh) {
+      problems.push(
+        `基线从 ${base.record.baseline.unaudited}（${base.source}）涨到 ${record.baseline.unaudited}：` +
+          `「只降不升」必须跨提交成立。确因**覆盖维度变更**需要重设时，须在 baseline.migration 里` +
+          `写明本次迁移（内容必须相对 base 是新的——同一条不能反复用）。`,
+      );
+    } else if (raised) {
+      notes.push(`[165-coverage] 基线迁移：${migration?.reason}`);
+    }
+
+    // 只有**内容相对 base 是新的**迁移才给豁免；豁免是精确列出的键，没有「缺省 = 全豁免」。
+    const exemptNewKeys = migrationFresh ? (migration?.exemptNewKeys ?? []) : [];
+    if (exemptNewKeys.length > 0) {
+      const invalid = invalidExemptKeys(exemptNewKeys, record.entries, base.record.entries);
+      if (invalid.length > 0) {
+        problems.push(
+          `${invalid.length} 条豁免声明指向的不是「本次新增且仍未判定」的键（清单过期或抄错）：` +
+            `${invalid.slice(0, 10).join(", ")}${invalid.length > 10 ? " …" : ""}`,
+        );
+      }
+    }
+    // 已判定的结论不能无痕回退（第五轮评审 P1）。
+    const regressed = regressedJudgedKeys(record.entries, base.record.entries);
+    if (regressed.length > 0) {
+      problems.push(
+        `${regressed.length} 个**已判定**的键被退回 unaudited（审计结论不能靠别处的进展冲抵；` +
+          `确需重新审计请显式说明并由评审放行）：` +
+          `${regressed.slice(0, 10).join(", ")}${regressed.length > 10 ? " …" : ""}`,
+      );
+    }
+    // 净额抵消（第三轮评审 P1）：本次新出现的键必须已经判定。
+    const undecided = unjudgedNewKeys(record.entries, base.record.entries, { exemptNewKeys });
+    if (undecided.length > 0) {
+      problems.push(
+        `${undecided.length} 个**本次新增**的键仍是 unaudited（不允许用「判掉/删除旧项」抵消总数）：` +
+          `${undecided.slice(0, 10).join(", ")}${undecided.length > 10 ? " …" : ""}`,
+      );
+    }
+  }
+
+  return { problems, notes };
+}
+
 /**
  * 读取并**完整校验**记录。任何形状问题都抛错（fail-closed）：
  * `baseline.unaudited` 必须是非负整数、`entries` 必须是普通对象、状态必须在枚举内、
