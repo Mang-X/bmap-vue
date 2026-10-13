@@ -22,9 +22,9 @@ export default defineConfig({
      * 而不是断言不符。这类失败的代价是**污染每一张 PR 的信号**：评审者得先证明「不是我改坏的」。
      *
      * 抬到 30s 是**安全网**，不是给某个用例的预算：它 ≈ 本机最慢用例（1.2s）的 25 倍，
-     * 慢到不会误伤真回归，又不会把「卡死」当作通过。刻意**不给逐条用例另设预算**——显式的
-     * per-test `timeout` 会盖过这里的全局值，反而更严。判据见
-     * `tests/behavior/unit-test-timeout-gate.test.ts`。
+     * 慢到不会误伤真回归，又有上限兜底（不能把它当成「允许卡住」）。刻意**不给逐条用例另设
+     * 预算**——显式的 per-test `timeout` 会盖过这里的全局值，反而更严。判据见
+     * `tests/behavior/unit-test-timeout-gate.test.ts`（区间 + `test:unit` 不得用命令行盖过）。
      *
      * 基准有自己的 180s 预算（`tests/performance/vitest.config.ts`），与此处不冲突。
      */
