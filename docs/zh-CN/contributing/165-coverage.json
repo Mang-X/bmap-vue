@@ -1,6 +1,6 @@
 {
   "baseline": {
-    "unaudited": 1246
+    "unaudited": 1131
   },
   "entries": {
     ".#AreaBoundary": {
@@ -3283,10 +3283,12 @@
       "status": "unaudited"
     },
     "./resolver#BMapResolver": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4（Vue 工具链适配，非 SDK 能力）：官方 JSAPI 没有「自动组件导入」概念，本库为 unplugin-vue-components 提供 resolver，是让公开组件可在 Vue 模板里免 import 使用的必要适配。合法组件名从 manifest 单一事实源生成（ADR 2026-09-11-loaded-sdk-client-boundary 决策 8），不手工维护第二份。无官方对应项可对齐，故保留。"
     },
     "./resolver#ComponentResolverLike": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4（同上）：resolver 的最小结构化接口，为**避免强依赖** unplugin-vue-components 而自持（该包是可选 peer）。它是 BMapResolver 返回类型的组成部分，不是独立能力。"
     },
     "./ui-kit#BMapError": {
       "status": "unaudited"
@@ -3475,347 +3477,460 @@
       "status": "unaudited"
     },
     "./volar#@vue/runtime-core.GlobalComponents": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4（Vue 工具链适配，无官方对应项）：由 manifest 组件名机械生成的 GlobalComponents 增强接口本体（renderVolarDts）。成员级清单由本记录逐项覆盖。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.Autocomplete": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Autocomplete\"]`，与 ./components#Autocomplete 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.BMapProvider": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"BMapProvider\"]`，与 ./components#BMapProvider 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.BezierCurve": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"BezierCurve\"]`，与 ./components#BezierCurve 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.Circle": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Circle\"]`，与 ./components#Circle 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.CityListControl": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"CityListControl\"]`，与 ./components#CityListControl 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.ContextMenu": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"ContextMenu\"]`，与 ./components#ContextMenu 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.CopyrightControl": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"CopyrightControl\"]`，与 ./components#CopyrightControl 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.CustomControl": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"CustomControl\"]`，与 ./components#CustomControl 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.CustomOverlay": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"CustomOverlay\"]`，与 ./components#CustomOverlay 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.DOMLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"DOMLayer\"]`，与 ./components#DOMLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.DistrictLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"DistrictLayer\"]`，与 ./components#DistrictLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.FillLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"FillLayer\"]`，与 ./components#FillLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.GeoJSONLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"GeoJSONLayer\"]`，与 ./components#GeoJSONLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.GroundOverlay": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"GroundOverlay\"]`，与 ./components#GroundOverlay 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.GroundPoint": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"GroundPoint\"]`，与 ./components#GroundPoint 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.HeatmapLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"HeatmapLayer\"]`，与 ./components#HeatmapLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.InfoWindow": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"InfoWindow\"]`，与 ./components#InfoWindow 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.Label": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Label\"]`，与 ./components#Label 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.LineLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"LineLayer\"]`，与 ./components#LineLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.LocationControl": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"LocationControl\"]`，与 ./components#LocationControl 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.MVTLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"MVTLayer\"]`，与 ./components#MVTLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.Map": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Map\"]`，与 ./components#Map 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.MapMask": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"MapMask\"]`，与 ./components#MapMask 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.MapTypeControl": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"MapTypeControl\"]`，与 ./components#MapTypeControl 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.Marker": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Marker\"]`，与 ./components#Marker 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.Marker3D": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Marker3D\"]`，与 ./components#Marker3D 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.MarkerCluster": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"MarkerCluster\"]`，与 ./components#MarkerCluster 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.MarkerList": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"MarkerList\"]`，与 ./components#MarkerList 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.MenuItem": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"MenuItem\"]`，与 ./components#MenuItem 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.MenuSeparator": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"MenuSeparator\"]`，与 ./components#MenuSeparator 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.NavigationControl": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"NavigationControl\"]`，与 ./components#NavigationControl 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.NavigationControl3D": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"NavigationControl3D\"]`，与 ./components#NavigationControl3D 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.OverviewMapControl": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"OverviewMapControl\"]`，与 ./components#OverviewMapControl 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.Panorama": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Panorama\"]`，与 ./components#Panorama 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.PanoramaControl": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"PanoramaControl\"]`，与 ./components#PanoramaControl 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.PanoramaCoverageLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"PanoramaCoverageLayer\"]`，与 ./components#PanoramaCoverageLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.PanoramaLabel": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"PanoramaLabel\"]`，与 ./components#PanoramaLabel 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.PointCollection": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"PointCollection\"]`，与 ./components#PointCollection 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.PointIconLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"PointIconLayer\"]`，与 ./components#PointIconLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.PointLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"PointLayer\"]`，与 ./components#PointLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.Polygon": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Polygon\"]`，与 ./components#Polygon 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.PolygonLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"PolygonLayer\"]`，与 ./components#PolygonLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.Polyline": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Polyline\"]`，与 ./components#Polyline 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.PolylineLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"PolylineLayer\"]`，与 ./components#PolylineLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.Prism": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Prism\"]`，与 ./components#Prism 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.RasterTileLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"RasterTileLayer\"]`，与 ./components#RasterTileLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.Rectangle": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Rectangle\"]`，与 ./components#Rectangle 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.ScaleControl": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"ScaleControl\"]`，与 ./components#ScaleControl 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.TextLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"TextLayer\"]`，与 ./components#TextLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.TileLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"TileLayer\"]`，与 ./components#TileLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.TrackLineLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"TrackLineLayer\"]`，与 ./components#TrackLineLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.TrafficLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"TrafficLayer\"]`，与 ./components#TrafficLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.WMSLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"WMSLayer\"]`，与 ./components#WMSLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.WMTSLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"WMTSLayer\"]`，与 ./components#WMTSLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.XYZLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"XYZLayer\"]`，与 ./components#XYZLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#@vue/runtime-core.GlobalComponents.ZoomControl": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"ZoomControl\"]`，与 ./components#ZoomControl 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents": {
       "status": "retained",
       "note": "生成的全局组件增强；成员级清单由本记录覆盖（#215 第二轮评审 P1 后纳入）"
     },
     "./volar#vue.GlobalComponents.Autocomplete": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Autocomplete\"]`，与 ./components#Autocomplete 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.BMapProvider": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"BMapProvider\"]`，与 ./components#BMapProvider 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.BezierCurve": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"BezierCurve\"]`，与 ./components#BezierCurve 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.Circle": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Circle\"]`，与 ./components#Circle 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.CityListControl": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"CityListControl\"]`，与 ./components#CityListControl 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.ContextMenu": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"ContextMenu\"]`，与 ./components#ContextMenu 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.CopyrightControl": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"CopyrightControl\"]`，与 ./components#CopyrightControl 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.CustomControl": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"CustomControl\"]`，与 ./components#CustomControl 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.CustomOverlay": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"CustomOverlay\"]`，与 ./components#CustomOverlay 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.DOMLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"DOMLayer\"]`，与 ./components#DOMLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.DistrictLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"DistrictLayer\"]`，与 ./components#DistrictLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.FillLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"FillLayer\"]`，与 ./components#FillLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.GeoJSONLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"GeoJSONLayer\"]`，与 ./components#GeoJSONLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.GroundOverlay": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"GroundOverlay\"]`，与 ./components#GroundOverlay 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.GroundPoint": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"GroundPoint\"]`，与 ./components#GroundPoint 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.HeatmapLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"HeatmapLayer\"]`，与 ./components#HeatmapLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.InfoWindow": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"InfoWindow\"]`，与 ./components#InfoWindow 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.Label": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Label\"]`，与 ./components#Label 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.LineLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"LineLayer\"]`，与 ./components#LineLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.LocationControl": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"LocationControl\"]`，与 ./components#LocationControl 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.MVTLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"MVTLayer\"]`，与 ./components#MVTLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.Map": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Map\"]`，与 ./components#Map 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.MapMask": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"MapMask\"]`，与 ./components#MapMask 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.MapTypeControl": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"MapTypeControl\"]`，与 ./components#MapTypeControl 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.Marker": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Marker\"]`，与 ./components#Marker 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.Marker3D": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Marker3D\"]`，与 ./components#Marker3D 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.MarkerCluster": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"MarkerCluster\"]`，与 ./components#MarkerCluster 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.MarkerList": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"MarkerList\"]`，与 ./components#MarkerList 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.MenuItem": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"MenuItem\"]`，与 ./components#MenuItem 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.MenuSeparator": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"MenuSeparator\"]`，与 ./components#MenuSeparator 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.NavigationControl": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"NavigationControl\"]`，与 ./components#NavigationControl 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.NavigationControl3D": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"NavigationControl3D\"]`，与 ./components#NavigationControl3D 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.OverviewMapControl": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"OverviewMapControl\"]`，与 ./components#OverviewMapControl 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.Panorama": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Panorama\"]`，与 ./components#Panorama 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.PanoramaControl": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"PanoramaControl\"]`，与 ./components#PanoramaControl 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.PanoramaCoverageLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"PanoramaCoverageLayer\"]`，与 ./components#PanoramaCoverageLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.PanoramaLabel": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"PanoramaLabel\"]`，与 ./components#PanoramaLabel 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.PointCollection": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"PointCollection\"]`，与 ./components#PointCollection 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.PointIconLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"PointIconLayer\"]`，与 ./components#PointIconLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.PointLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"PointLayer\"]`，与 ./components#PointLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.Polygon": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Polygon\"]`，与 ./components#Polygon 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.PolygonLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"PolygonLayer\"]`，与 ./components#PolygonLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.Polyline": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Polyline\"]`，与 ./components#Polyline 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.PolylineLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"PolylineLayer\"]`，与 ./components#PolylineLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.Prism": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Prism\"]`，与 ./components#Prism 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.RasterTileLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"RasterTileLayer\"]`，与 ./components#RasterTileLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.Rectangle": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"Rectangle\"]`，与 ./components#Rectangle 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.ScaleControl": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"ScaleControl\"]`，与 ./components#ScaleControl 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.TextLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"TextLayer\"]`，与 ./components#TextLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.TileLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"TileLayer\"]`，与 ./components#TileLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.TrackLineLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"TrackLineLayer\"]`，与 ./components#TrackLineLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.TrafficLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"TrafficLayer\"]`，与 ./components#TrafficLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.WMSLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"WMSLayer\"]`，与 ./components#WMSLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.WMTSLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"WMTSLayer\"]`，与 ./components#WMTSLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.XYZLayer": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"XYZLayer\"]`，与 ./components#XYZLayer 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     },
     "./volar#vue.GlobalComponents.ZoomControl": {
-      "status": "unaudited"
+      "status": "retained",
+      "note": "Class 4：生成成员 `typeof import(...)[\"ZoomControl\"]`，与 ./components#ZoomControl 一一对应（56 组件 × vue / @vue/runtime-core 两模块）；成员表由 generate:manifest:check 防漂移，无官方对应项可对齐。"
     }
   }
 }
