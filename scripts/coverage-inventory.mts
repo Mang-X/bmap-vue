@@ -23,10 +23,23 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve as resolvePath } from "node:path";
 import ts from "typescript";
 
-/** 处置状态。`unaudited` 是**唯一**允许存量存在的一档，其余四档都表示已经人工判过。 */
-export type CoverageStatus = "fixed" | "retained" | "not-applicable" | "deferred" | "unaudited";
+/**
+ * 处置状态。`unaudited` 是**唯一**允许存量存在的一档，其余五档都表示已经人工判过。
+ *
+ * `consistent` 与 #165 §4 的「已一致」对应：**已核对且与官方一致、无需改动**。它此前缺失，
+ * 导致 B/C/D/F 审计表里「判定为对齐（不修）」那类结论**没有可落的状态**（#223 维护者裁决新增）。
+ * 它和 `retained` 的区别是**有没有差异**：`consistent` = 无差异；`retained` = 有意保留的差异。
+ */
+export type CoverageStatus =
+  | "consistent"
+  | "fixed"
+  | "retained"
+  | "not-applicable"
+  | "deferred"
+  | "unaudited";
 
 export const COVERAGE_STATUSES: readonly CoverageStatus[] = [
+  "consistent",
   "fixed",
   "retained",
   "not-applicable",
@@ -269,13 +282,12 @@ export function coverageDrift(
 
 /** 按状态计数（用于报告与基线比较）。 */
 export function statusCounts(record: CoverageRecord): Record<CoverageStatus, number> {
-  const counts: Record<CoverageStatus, number> = {
-    fixed: 0,
-    retained: 0,
-    "not-applicable": 0,
-    deferred: 0,
-    unaudited: 0,
-  };
+  // 从 `COVERAGE_STATUSES` 派生，而不是手抄一份键表：否则新增一个状态时这里会**静默**漏掉它
+  // （计成 `undefined`，统计行印出 `consistent undefined`）——#223 加 `consistent` 时实测过。
+  const counts = Object.fromEntries(COVERAGE_STATUSES.map((status) => [status, 0])) as Record<
+    CoverageStatus,
+    number
+  >;
   for (const entry of Object.values(record.entries)) counts[entry.status] += 1;
   return counts;
 }

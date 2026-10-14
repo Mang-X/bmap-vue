@@ -206,9 +206,10 @@ describe("statusCounts", () => {
           b: { status: "fixed" },
           c: { status: "deferred" },
           d: { status: "unaudited" },
+          e: { status: "consistent" },
         },
       }),
-    ).toEqual({ fixed: 2, retained: 0, "not-applicable": 0, deferred: 1, unaudited: 1 });
+    ).toEqual({ consistent: 1, fixed: 2, retained: 0, "not-applicable": 0, deferred: 1, unaudited: 1 });
   });
 });
 
@@ -249,6 +250,23 @@ describe("readCoverageRecord：fail-closed 且有依据要求", () => {
         write("bad.json", { baseline: { unaudited: 0 }, entries: { a: { status: "whatever" } } }),
       ),
     ).toThrow(/不在允许集合里/);
+  });
+
+  it("`consistent` 是合法已判定档，但同样**必须带依据**（#223 新增）", () => {
+    // 合法：有 note 就通过，并落到 entries 上。
+    const ok = readCoverageRecord(
+      write("consistent-ok.json", {
+        baseline: { unaudited: 0 },
+        entries: { a: { status: "consistent", note: "对照官方 MapOptions 全字段一致" } },
+      }),
+    );
+    expect(ok.entries.a).toEqual({ status: "consistent", note: "对照官方 MapOptions 全字段一致" });
+    // 缺 note ⇒ 抛错（与其它已判定档同一口径，「已对齐」也要留证据）。
+    expect(() =>
+      readCoverageRecord(
+        write("consistent-nonote.json", { baseline: { unaudited: 0 }, entries: { a: { status: "consistent" } } }),
+      ),
+    ).toThrow(/必须给出非空 note/);
   });
 
   it("**已判定项没有 note ⇒ 抛错**（否则全标 retained 就能把未核对清零）", () => {
