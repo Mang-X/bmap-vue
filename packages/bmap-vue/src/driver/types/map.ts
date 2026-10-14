@@ -161,6 +161,18 @@ export interface MapDriver {
   setZoom(map: MapHandle, zoom: number, options?: SetZoomOptions): void;
   getZoom(map: MapHandle): number;
 
+  /**
+   * 缩放级别上下限（官方 `Map#getMinZoom` / `getMaxZoom` / `setMinZoom` / `setMaxZoom`）。
+   *
+   * 与 `<Map>` 的 `minZoom` / `maxZoom` **prop 不同**：prop 是**构造期** `MapOptions` 的初值，
+   * 这两个命令作用于**已建好的地图**（用户交互与 `setZoom` 都要受它约束）。两者不是「同一件事的
+   * 两种写法」，因此都保留（#167 工作包 B，13 个缺失暴露方法的第一组）。
+   */
+  getMinZoom(map: MapHandle): number;
+  getMaxZoom(map: MapHandle): number;
+  setMinZoom(map: MapHandle, zoom: number): void;
+  setMaxZoom(map: MapHandle, zoom: number): void;
+
   setHeading(map: MapHandle, heading: number, options?: ViewCommandOptions): void;
   getHeading(map: MapHandle): number;
 

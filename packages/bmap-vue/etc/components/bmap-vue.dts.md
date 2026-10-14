@@ -288,6 +288,8 @@ declare const __VLS_component_2: DefineComponent<MapProps, {
     prefersReducedMotion(): boolean;
     getCenter(): Point | null;
     getZoom(): number | null;
+    getMinZoom(): number | null;
+    getMaxZoom(): number | null;
     getHeading(): number | null;
     getTilt(): number | null;
     getBounds(): Bounds_2 | null;
@@ -296,6 +298,8 @@ declare const __VLS_component_2: DefineComponent<MapProps, {
     getScreenshot(): string | null;
     setCenter(center: Point | string, options?: ViewCommandOptions_2): void;
     setZoom(zoom: number, options?: SetZoomOptions_2): void;
+    setMinZoom(zoom: number): void;
+    setMaxZoom(zoom: number): void;
     setHeading(heading: number, options?: ViewCommandOptions_2): void;
     setTilt(tilt: number, options?: ViewCommandOptions_2): void;
     panTo(point: Point, options?: PanToOptions_2): void;
@@ -2439,6 +2443,10 @@ declare interface MapDriver {
     getCenter(map: MapHandle): Point;
     setZoom(map: MapHandle, zoom: number, options?: SetZoomOptions): void;
     getZoom(map: MapHandle): number;
+    getMinZoom(map: MapHandle): number;
+    getMaxZoom(map: MapHandle): number;
+    setMinZoom(map: MapHandle, zoom: number): void;
+    setMaxZoom(map: MapHandle, zoom: number): void;
     setHeading(map: MapHandle, heading: number, options?: ViewCommandOptions): void;
     getHeading(map: MapHandle): number;
     setTilt(map: MapHandle, tilt: number, options?: ViewCommandOptions): void;

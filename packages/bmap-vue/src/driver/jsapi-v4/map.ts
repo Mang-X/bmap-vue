@@ -878,6 +878,26 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       return numberOf("map.getZoom", callRequired(raw, "getZoom"));
     },
 
+    // 缩放级别上下限（#167 工作包 B）。四个都是官方 `BMap.Map` 的实例方法，直接按名调用；
+    // 缺成员一律由 `callRequired` 抛错，不做静默降级。
+    getMinZoom(map) {
+      const raw = resolveLive(map);
+      return numberOf("map.getMinZoom", callRequired(raw, "getMinZoom"));
+    },
+
+    getMaxZoom(map) {
+      const raw = resolveLive(map);
+      return numberOf("map.getMaxZoom", callRequired(raw, "getMaxZoom"));
+    },
+
+    setMinZoom(map, zoom) {
+      callRequired(resolveLive(map), "setMinZoom", zoom);
+    },
+
+    setMaxZoom(map, zoom) {
+      callRequired(resolveLive(map), "setMaxZoom", zoom);
+    },
+
     setHeading(map, heading, options?: ViewCommandOptions) {
       const raw = resolveLive(map);
       capabilities.require("map.heading");

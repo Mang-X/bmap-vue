@@ -26,12 +26,16 @@ function createFixture() {
   const mapDriver = {
     getCenter: vi.fn(() => POINT),
     getZoom: vi.fn(() => 12),
+    getMinZoom: vi.fn(() => 3),
+    getMaxZoom: vi.fn(() => 19),
     getHeading: vi.fn(() => 30),
     getTilt: vi.fn(() => 45),
     getBounds: vi.fn(() => BOUNDS),
     getSize: vi.fn(() => SIZE),
     setCenter: vi.fn(),
     setZoom: vi.fn(),
+    setMinZoom: vi.fn(),
+    setMaxZoom: vi.fn(),
     setHeading: vi.fn(),
     setTilt: vi.fn(),
     panTo: vi.fn(),
@@ -169,6 +173,35 @@ describe("createMapCommands：有句柄时", () => {
     expect(commands.supports("map.zoom")).toBe(true);
     expect(commands.supports("overlay.marker-3d")).toBe(false);
     expect(supports).toHaveBeenCalledWith("overlay.marker-3d");
+  });
+});
+
+/**
+ * #167 工作包 B：`BMap.Map` 的缩放级别上下限（`getMinZoom` / `getMaxZoom` / `setMinZoom` /
+ * `setMaxZoom`）。它们与 `<Map>` 的 `minZoom` / `maxZoom` **prop 不是同一件事** —— prop 是构造期
+ * `MapOptions` 初值，这四个作用于**已建好的地图**。因此命令面要能读回「当前生效的限制」，
+ * 也要能在运行期改它。
+ */
+describe("createMapCommands：缩放级别上下限（#167 工作包 B）", () => {
+  it("有句柄时读回生效的限制，写命令原样透传给 Driver", () => {
+    const { commands, mapDriver } = createFixture();
+    expect(commands.getMinZoom()).toBe(3);
+    expect(commands.getMaxZoom()).toBe(19);
+    commands.setMinZoom(5);
+    commands.setMaxZoom(18);
+    expect(mapDriver.setMinZoom).toHaveBeenCalledWith(expect.anything(), 5);
+    expect(mapDriver.setMaxZoom).toHaveBeenCalledWith(expect.anything(), 18);
+  });
+
+  it("没有句柄时：读回 null、写为空操作（与本面其余读写同口径）", () => {
+    const { commands, mapDriver, detach } = createFixture();
+    detach();
+    expect(commands.getMinZoom()).toBeNull();
+    expect(commands.getMaxZoom()).toBeNull();
+    commands.setMinZoom(5);
+    commands.setMaxZoom(18);
+    expect(mapDriver.setMinZoom).not.toHaveBeenCalled();
+    expect(mapDriver.setMaxZoom).not.toHaveBeenCalled();
   });
 });
 

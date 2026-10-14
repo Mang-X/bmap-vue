@@ -90,6 +90,12 @@ export class FakeV4Map extends FakeV4EventTarget {
   options: Record<string, unknown>
   center: FakeV4Point | null = null
   zoom: number | null = null
+  /**
+   * 缩放级别上下限（官方 `BMap.Map` 的 `getMinZoom` / `getMaxZoom` / `setMinZoom` / `setMaxZoom`）。
+   * 官方 `MapOptions` 只声明范围 [3, 21]、没有文档化默认值，这里取 Baidu 常用初值。
+   */
+  minZoom = 3
+  maxZoom = 19
   heading = 0
   tilt = 0
   mapType: string | null = null
@@ -712,6 +718,24 @@ export class FakeV4Map extends FakeV4EventTarget {
 
   getZoom(): number | null {
     return this.zoom
+  }
+
+  getMinZoom(): number {
+    return this.minZoom
+  }
+
+  getMaxZoom(): number {
+    return this.maxZoom
+  }
+
+  setMinZoom(zoom: number): void {
+    this.callLog.push('setMinZoom')
+    this.minZoom = zoom
+  }
+
+  setMaxZoom(zoom: number): void {
+    this.callLog.push('setMaxZoom')
+    this.maxZoom = zoom
   }
 
   /** 按中心点与级别推导的可视范围（空范围 = 尚未初始化，与官方 `getBounds()` 语义一致）。 */

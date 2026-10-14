@@ -141,6 +141,17 @@ export function runMapFacetContract(createHarness: () => MapFacetHarness) {
       expect(driver.map.getTilt(map)).toBe(30);
     });
 
+    it("round-trips zoom limits（#167 工作包 B：作用在已建好的地图上）", () => {
+      const harness = createHarness();
+      const driver = harness.driver();
+      const map = driver.map.create(harness.container());
+
+      driver.map.setMinZoom(map, 5);
+      driver.map.setMaxZoom(map, 18);
+      expect(driver.map.getMinZoom(map)).toBe(5);
+      expect(driver.map.getMaxZoom(map)).toBe(18);
+    });
+
     it("normalizes bounds and size", () => {
       const harness = createHarness();
       const driver = harness.driver();
