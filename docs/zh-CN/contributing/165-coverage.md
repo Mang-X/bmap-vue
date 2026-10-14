@@ -46,7 +46,8 @@ pnpm check:165-coverage       # 门禁：一一对应 + unaudited 不超基线�
 > `generate:manifest*` 写）。干净 checkout 下漏掉第一步会以「读不到入口 ./volar 的声明文件」
 > 报错并提示该命令 —— 错误信息里写了补救步骤。
 
-判定某个名字后，直接编辑 `165-coverage.json` 把它的 `status` 从 `unaudited` 改成四档之一并写 `note`，
+判定某个名字后，直接编辑 `165-coverage.json` 把它的 `status` 从 `unaudited` 改成**五种已判定状态之一**
+（`consistent` / `fixed` / `retained` / `not-applicable` / `deferred`）并写 `note`，
 然后重跑 `generate:165-coverage`（它会下调基线）。**基线只降不升**：如果门禁报「未核对数上涨」，
 说明有人把已判定的状态改回去了，或新增导出未判定。
 
@@ -60,7 +61,7 @@ pnpm check:165-coverage
 ```
 
 它在结尾逐行打印当前口径：`入口 N 个｜清单 M 个「入口#名字」`、
-`未核对 x/上限 y｜fixed … / retained … / n-a … / deferred …`。更细的逐名处置看
+`未核对 x/上限 y｜consistent … / fixed … / retained … / n-a … / deferred …`。更细的逐名处置看
 `docs/zh-CN/contributing/165-coverage.json` 本身——每条的 `status` 就是进度。
 
 **尚未收口。** 存量未核对里有一部分其实在 #174 的 B/C/D/F 成员级审计与 E 的审计表里已经看过，
