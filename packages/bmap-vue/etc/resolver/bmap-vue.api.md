@@ -15,7 +15,7 @@ export interface ComponentResolverLike {
         from: string;
     } | undefined | void;
     // (undocumented)
-    type?: "component" | "directive";
+    type: "component" | "directive";
 }
 
 // (No @packageDocumentation comment for this package)

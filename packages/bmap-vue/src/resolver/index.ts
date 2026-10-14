@@ -2,10 +2,15 @@
  * 自动组件 resolver(unplugin-vue-components)
  *
  * 合法组件列表从 manifest 生成,不手工维护第二份。
- * 为避免强依赖 unplugin-vue-components,此处仅定义最小接口兼容(结构类型)。
+ *
+ * `type` 刻意是**必填**、而不是 `type?`：目标插件 `unplugin-vue-components` 的
+ * `Options.resolvers` 要求 `ComponentResolverObject`（其中 `type` 必填）。写成可选时，
+ * 消费者 `Components({ resolvers: [BMapResolver()] })` 会被 TS 拒绝 —— 尽管运行时返回的
+ * 对象确实带 `type`（#221：类型把可用的东西挡在门外）。这里仍只做**结构**兼容，
+ * 不 import 该包（它是可选工具链集成，不是本库的运行期 peer）。
  */
 export interface ComponentResolverLike {
-  type?: "component" | "directive";
+  type: "component" | "directive";
   resolve: (name: string) => { name: string; from: string } | undefined | void;
 }
 
