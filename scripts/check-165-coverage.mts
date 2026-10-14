@@ -102,7 +102,7 @@ console.log(
 );
 console.log(
   `[165-coverage] 未核对 ${counts.unaudited}/${record.baseline.unaudited}（上限）｜` +
-    `fixed ${counts.fixed} / retained ${counts.retained} / n-a ${counts["not-applicable"]} / deferred ${counts.deferred}` +
+    `consistent ${counts.consistent} / fixed ${counts.fixed} / retained ${counts.retained} / n-a ${counts["not-applicable"]} / deferred ${counts.deferred}` +
     (base.kind === "found" ? `｜base(${base.source}) 基线 ${base.record.baseline.unaudited}` : ""),
 );
 

@@ -86,8 +86,8 @@ writeFileSync(
 console.log(`[165-coverage] 入口 ${entryPoints.length} 个：${entryPoints.map((p) => p.entry).join(" ")}`);
 console.log(`[165-coverage] 记录了 ${Object.keys(entries).length} 个「入口#名字」`);
 console.log(
-  `  未核对 ${counts.unaudited}｜已判定 ${counts.fixed + counts.retained + counts["not-applicable"] + counts.deferred}` +
-    `（fixed ${counts.fixed} / retained ${counts.retained} / n-a ${counts["not-applicable"]} / deferred ${counts.deferred}）`,
+  `  未核对 ${counts.unaudited}｜已判定 ${counts.consistent + counts.fixed + counts.retained + counts["not-applicable"] + counts.deferred}` +
+    `（consistent ${counts.consistent} / fixed ${counts.fixed} / retained ${counts.retained} / n-a ${counts["not-applicable"]} / deferred ${counts.deferred}）`,
 );
 if (added > 0) console.log(`  新增 ${added} 个键，已按 \`unaudited\` 落盘 —— 需要逐个判定`);
 if (stale.length > 0) console.log(`  移除了 ${stale.length} 个已消失的键`);
