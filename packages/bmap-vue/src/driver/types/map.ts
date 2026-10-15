@@ -173,6 +173,26 @@ export interface MapDriver {
   setMinZoom(map: MapHandle, zoom: number): void;
   setMaxZoom(map: MapHandle, zoom: number): void;
 
+  /**
+   * 同时设置中心点与级别（官方 `Map#centerAndZoom`）。官方有**两个重载**（`core/Map.d.ts:532` / `:555`）：
+   *
+   * - `centerAndZoom(center: Point, zoom: number, options?)` —— 点 + 必填级别；
+   * - `centerAndZoom(city: string, zoom?: number, options?)` —— **城市名**，`zoom` 可省，
+   *   省略时官方「自动适配展示该城市的最佳缩放级别」。
+   *
+   * 两个分支都要保留：字符串分支有官方独有的「不传 zoom 自动适配」语义，用
+   * `setCenter(city) + setZoom()` 替代会**丢掉它**，也不是原子操作。
+   */
+  centerAndZoom(map: MapHandle, center: Point, zoom: number, options?: ViewCommandOptions): void;
+  centerAndZoom(map: MapHandle, city: string, zoom?: number, options?: ViewCommandOptions): void;
+
+  /**
+   * 把地图重置为正北方向（官方 `Map#resetHeading`；`options.noAnimation` / `callback`）。
+   *
+   * 与 `setHeading(map, 0)` 的区别是官方声明的：`resetHeading` 的**动画不可被打断**。
+   */
+  resetHeading(map: MapHandle, options?: ViewCommandOptions): void;
+
   setHeading(map: MapHandle, heading: number, options?: ViewCommandOptions): void;
   getHeading(map: MapHandle): number;
 
@@ -181,6 +201,9 @@ export interface MapDriver {
 
   getBounds(map: MapHandle): Bounds;
   getSize(map: MapHandle): Size;
+
+  /** 两点间距离，**米**（官方 `Map#getDistance(start: Point, end: Point): number`）。纯计算，与地图状态无关。 */
+  getDistance(map: MapHandle, start: Point, end: Point): number;
 
   /** 经纬度 → 屏幕像素（v4 `pointToPixel`；不传 options，按当前地图状态换算） */
   pointToPixel(map: MapHandle, point: Point): Pixel;

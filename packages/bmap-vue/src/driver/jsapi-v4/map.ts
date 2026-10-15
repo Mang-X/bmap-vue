@@ -873,6 +873,19 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       );
     },
 
+    centerAndZoom(map, center, zoom?: number, options?: ViewCommandOptions) {
+      // 两个官方重载共用这一条实现：`toRawCenter` 已经处理 `Point | string`（与 `setCenter`
+      // 同一入口）。字符串分支的 `zoom` 可省 —— 官方语义是「自动适配该城市的最佳级别」，
+      // 因此**不替它补一个级别**，原样把 `undefined` 递下去。
+      callRequired(
+        resolveLive(map),
+        "centerAndZoom",
+        toRawCenter(center),
+        zoom,
+        toRawViewCommandOptions(options),
+      );
+    },
+
     getZoom(map) {
       const raw = resolveLive(map);
       return numberOf("map.getZoom", callRequired(raw, "getZoom"));
@@ -904,6 +917,14 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       callOptional(raw, "setHeading", heading, toRawViewCommandOptions(options));
     },
 
+    resetHeading(map, options?: ViewCommandOptions) {
+      // ⚠️ `callRequired`，**不是** `capabilities.require("map.heading") + callOptional`：
+      // 那条路的能力探测只覆盖 `setHeading`，一个「有 setHeading 但没有 resetHeading」的实例
+      // 会让 `callOptional` **静默 no-op**（既不归零也不报错）。既然对外承诺了独立的
+      // `resetHeading`，缺成员就该抛错（#225 评审 P2）。
+      callRequired(resolveLive(map), "resetHeading", toRawViewCommandOptions(options));
+    },
+
     getHeading(map) {
       const raw = resolveLive(map);
       capabilities.require("map.heading");
@@ -930,6 +951,14 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
     getSize(map) {
       const raw = resolveLive(map);
       return geometry.fromRawSize(callRequired(raw, "getSize"));
+    },
+
+    getDistance(map, start, end) {
+      const raw = resolveLive(map);
+      return numberOf(
+        "map.getDistance",
+        callRequired(raw, "getDistance", geometry.toRawPoint(start), geometry.toRawPoint(end)),
+      );
     },
 
     pointToPixel(map, point) {

@@ -294,6 +294,7 @@ declare const __VLS_component_2: DefineComponent<MapProps, {
     getZoom(): number | null;
     getMinZoom(): number | null;
     getMaxZoom(): number | null;
+    getDistance(start: Point, end: Point): number | null;
     getHeading(): number | null;
     getTilt(): number | null;
     getBounds(): Bounds | null;
@@ -304,6 +305,9 @@ declare const __VLS_component_2: DefineComponent<MapProps, {
     setZoom(zoom: number, options?: SetZoomOptions): void;
     setMinZoom(zoom: number): void;
     setMaxZoom(zoom: number): void;
+    centerAndZoom(center: Point, zoom: number, options?: ViewCommandOptions): void;
+    centerAndZoom(city: string, zoom?: number, options?: ViewCommandOptions): void;
+    resetHeading(options?: ViewCommandOptions): void;
     setHeading(heading: number, options?: ViewCommandOptions): void;
     setTilt(tilt: number, options?: ViewCommandOptions): void;
     panTo(point: Point, options?: PanToOptions): void;
@@ -3207,6 +3211,7 @@ export declare interface MapCommands {
     getZoom(): number | null;
     getMinZoom(): number | null;
     getMaxZoom(): number | null;
+    getDistance(start: Point, end: Point): number | null;
     getHeading(): number | null;
     getTilt(): number | null;
     getBounds(): Bounds | null;
@@ -3217,6 +3222,9 @@ export declare interface MapCommands {
     setZoom(zoom: number, options?: SetZoomOptions): void;
     setMinZoom(zoom: number): void;
     setMaxZoom(zoom: number): void;
+    centerAndZoom(center: Point, zoom: number, options?: ViewCommandOptions): void;
+    centerAndZoom(city: string, zoom?: number, options?: ViewCommandOptions): void;
+    resetHeading(options?: ViewCommandOptions): void;
     setHeading(heading: number, options?: ViewCommandOptions): void;
     setTilt(tilt: number, options?: ViewCommandOptions): void;
     panTo(point: Point, options?: PanToOptions): void;
@@ -3245,12 +3253,16 @@ export declare interface MapDriver {
     getMaxZoom(map: MapHandle): number;
     setMinZoom(map: MapHandle, zoom: number): void;
     setMaxZoom(map: MapHandle, zoom: number): void;
+    centerAndZoom(map: MapHandle, center: Point, zoom: number, options?: ViewCommandOptions): void;
+    centerAndZoom(map: MapHandle, city: string, zoom?: number, options?: ViewCommandOptions): void;
+    resetHeading(map: MapHandle, options?: ViewCommandOptions): void;
     setHeading(map: MapHandle, heading: number, options?: ViewCommandOptions): void;
     getHeading(map: MapHandle): number;
     setTilt(map: MapHandle, tilt: number, options?: ViewCommandOptions): void;
     getTilt(map: MapHandle): number;
     getBounds(map: MapHandle): Bounds;
     getSize(map: MapHandle): Size;
+    getDistance(map: MapHandle, start: Point, end: Point): number;
     pointToPixel(map: MapHandle, point: Point): Pixel;
     pixelToPoint(map: MapHandle, pixel: Pixel): Point;
     panTo(map: MapHandle, point: Point, options?: PanToOptions): void;

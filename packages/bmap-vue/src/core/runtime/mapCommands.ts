@@ -58,6 +58,12 @@ export interface MapCommands {
    */
   getMinZoom(): number | null;
   getMaxZoom(): number | null;
+  /**
+   * 两点间距离，**米**（官方 `Map#getDistance(start: Point, end: Point): number`）。
+   *
+   * 纯计算，与地图状态无关；无句柄时返回 `null`（与本面其余读命令同口径）。
+   */
+  getDistance(start: Point, end: Point): number | null;
   getHeading(): number | null;
   getTilt(): number | null;
   getBounds(): Bounds | null;
@@ -125,6 +131,24 @@ export interface MapCommands {
    */
   setMinZoom(zoom: number): void;
   setMaxZoom(zoom: number): void;
+  /**
+   * 同时设置中心点与级别（官方 `Map#centerAndZoom`，**两个重载**）。
+   *
+   * - `centerAndZoom(center: Point, zoom: number, options?)` —— 点 + 必填级别；
+   * - `centerAndZoom(city: string, zoom?: number, options?)` —— **城市名**，`zoom` 可省；
+   *   省略时官方「自动适配展示该城市的最佳缩放级别」。
+   *
+   * ⚠️ 字符串分支**不要**用 `setCenter(city) + setZoom()` 代替：那样既不是原子操作，
+   * 也会**丢掉「不传 zoom 自动适配」**这条官方独有的语义。
+   */
+  centerAndZoom(center: Point, zoom: number, options?: ViewCommandOptions): void;
+  centerAndZoom(city: string, zoom?: number, options?: ViewCommandOptions): void;
+  /**
+   * 把地图重置为**正北方向**（官方 `Map#resetHeading`）。
+   *
+   * 与 `setHeading(0)` 的区别是官方声明的：`resetHeading` 的重置动画**不可被打断**。
+   */
+  resetHeading(options?: ViewCommandOptions): void;
   setHeading(heading: number, options?: ViewCommandOptions): void;
   setTilt(tilt: number, options?: ViewCommandOptions): void;
 
@@ -206,6 +230,8 @@ export function createMapCommands(source: MapCommandSource): MapCommands {
     getZoom: () => read((client, map) => client.driver.map.getZoom(map)),
     getMinZoom: () => read((client, map) => client.driver.map.getMinZoom(map)),
     getMaxZoom: () => read((client, map) => client.driver.map.getMaxZoom(map)),
+    getDistance: (start, end) =>
+      read((client, map) => client.driver.map.getDistance(map, start, end)),
     getHeading: () => read((client, map) => client.driver.map.getHeading(map)),
     getTilt: () => read((client, map) => client.driver.map.getTilt(map)),
     getBounds: () => read((client, map) => client.driver.map.getBounds(map)),
@@ -222,6 +248,19 @@ export function createMapCommands(source: MapCommandSource): MapCommands {
     setZoom: (zoom, options) => write((client, map) => client.driver.map.setZoom(map, zoom, options)),
     setMinZoom: (zoom) => write((client, map) => client.driver.map.setMinZoom(map, zoom)),
     setMaxZoom: (zoom) => write((client, map) => client.driver.map.setMaxZoom(map, zoom)),
+    centerAndZoom(center: Point | string, zoom?: number, options?: ViewCommandOptions) {
+      write((client, map) => {
+        // 官方两个重载各走一条：字符串分支的 `zoom` 可省（官方自动适配该城市的最佳级别）；
+        // 点分支 `zoom` 必填 —— 重载已保证调用方给了它，`as number` 只是把这条契约告诉 TS。
+        if (typeof center === "string") {
+          client.driver.map.centerAndZoom(map, center, zoom, options);
+        } else {
+          client.driver.map.centerAndZoom(map, center, zoom as number, options);
+        }
+      });
+    },
+    resetHeading: (options) =>
+      write((client, map) => client.driver.map.resetHeading(map, options)),
     setHeading: (heading, options) =>
       write((client, map) => client.driver.map.setHeading(map, heading, options)),
     setTilt: (tilt, options) => write((client, map) => client.driver.map.setTilt(map, tilt, options)),

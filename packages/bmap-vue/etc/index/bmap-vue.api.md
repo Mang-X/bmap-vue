@@ -1872,6 +1872,9 @@ export const MAP_SUSPEND_REASONS: {
 
 // @public
 export interface MapCommands {
+    centerAndZoom(center: Point, zoom: number, options?: ViewCommandOptions): void;
+    // (undocumented)
+    centerAndZoom(city: string, zoom?: number, options?: ViewCommandOptions): void;
     // (undocumented)
     fitBounds(bounds: Bounds): void;
     flyTo(center: Point, zoom: number, options?: FlyToOptions): void;
@@ -1879,6 +1882,7 @@ export interface MapCommands {
     getBounds(): Bounds | null;
     // (undocumented)
     getCenter(): Point | null;
+    getDistance(start: Point, end: Point): number | null;
     // (undocumented)
     getHeading(): number | null;
     // (undocumented)
@@ -1895,6 +1899,7 @@ export interface MapCommands {
     // (undocumented)
     panBy(pixel: Pixel): void;
     panTo(point: Point, options?: PanToOptions): void;
+    resetHeading(options?: ViewCommandOptions): void;
     setCenter(center: Point | string, options?: ViewCommandOptions): void;
     // (undocumented)
     setHeading(heading: number, options?: ViewCommandOptions): void;
@@ -1925,6 +1930,9 @@ export interface MapContext extends MapRuntimeShape {
 // @public (undocumented)
 export interface MapDriver {
     cancelViewAnimation(map: MapHandle, animation: unknown): ViewAnimationCancelOutcome;
+    centerAndZoom(map: MapHandle, center: Point, zoom: number, options?: ViewCommandOptions): void;
+    // (undocumented)
+    centerAndZoom(map: MapHandle, city: string, zoom?: number, options?: ViewCommandOptions): void;
     // (undocumented)
     checkResize(map: MapHandle): void;
     // (undocumented)
@@ -1937,6 +1945,7 @@ export interface MapDriver {
     getBounds(map: MapHandle): Bounds;
     // (undocumented)
     getCenter(map: MapHandle): Point;
+    getDistance(map: MapHandle, start: Point, end: Point): number;
     // (undocumented)
     getHeading(map: MapHandle): number;
     // (undocumented)
@@ -1958,6 +1967,7 @@ export interface MapDriver {
     panTo(map: MapHandle, point: Point, options?: PanToOptions): void;
     pixelToPoint(map: MapHandle, pixel: Pixel): Point;
     pointToPixel(map: MapHandle, point: Point): Pixel;
+    resetHeading(map: MapHandle, options?: ViewCommandOptions): void;
     // (undocumented)
     setCenter(map: MapHandle, center: Point | string, options?: ViewCommandOptions): void;
     // (undocumented)

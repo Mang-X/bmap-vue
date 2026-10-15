@@ -28,6 +28,7 @@ function createFixture() {
     getZoom: vi.fn(() => 12),
     getMinZoom: vi.fn(() => 3),
     getMaxZoom: vi.fn(() => 19),
+    getDistance: vi.fn(() => 1234),
     getHeading: vi.fn(() => 30),
     getTilt: vi.fn(() => 45),
     getBounds: vi.fn(() => BOUNDS),
@@ -36,6 +37,8 @@ function createFixture() {
     setZoom: vi.fn(),
     setMinZoom: vi.fn(),
     setMaxZoom: vi.fn(),
+    centerAndZoom: vi.fn(),
+    resetHeading: vi.fn(),
     setHeading: vi.fn(),
     setTilt: vi.fn(),
     panTo: vi.fn(),
@@ -202,6 +205,45 @@ describe("createMapCommands：缩放级别上下限（#167 工作包 B）", () =
     commands.setMaxZoom(18);
     expect(mapDriver.setMinZoom).not.toHaveBeenCalled();
     expect(mapDriver.setMaxZoom).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * #167 工作包 B：`centerAndZoom` / `resetHeading`（视图写命令）与 `getDistance`（纯几何读）。
+ */
+describe("createMapCommands：视图命令与几何（#167 工作包 B）", () => {
+  const ORIGIN = { lng: 116.4, lat: 39.9 };
+  const AWAY = { lng: 117.2, lat: 39.0 };
+
+  it("centerAndZoom / resetHeading 原样透传给 Driver（含 options）；getDistance 读回", () => {
+    const { commands, mapDriver } = createFixture();
+    const options = { noAnimation: true, callback: () => {} };
+    commands.centerAndZoom(ORIGIN, 12, options);
+    commands.resetHeading(options);
+    expect(mapDriver.centerAndZoom).toHaveBeenCalledWith(expect.anything(), ORIGIN, 12, options);
+    expect(mapDriver.resetHeading).toHaveBeenCalledWith(expect.anything(), options);
+    expect(commands.getDistance(ORIGIN, AWAY)).toBe(1234);
+    expect(mapDriver.getDistance).toHaveBeenCalledWith(expect.anything(), ORIGIN, AWAY);
+  });
+
+  it("centerAndZoom 支持官方的**城市名重载**，含省略 zoom 的自动适配分支（#225 评审 P1）", () => {
+    const { commands, mapDriver } = createFixture();
+    // 带 zoom。
+    commands.centerAndZoom("北京", 12);
+    expect(mapDriver.centerAndZoom).toHaveBeenCalledWith(expect.anything(), "北京", 12, undefined);
+    // 省略 zoom：**不替官方补级别**，原样把 undefined 递下去（官方自动适配该城市的最佳级别）。
+    commands.centerAndZoom("上海");
+    expect(mapDriver.centerAndZoom).toHaveBeenCalledWith(expect.anything(), "上海", undefined, undefined);
+  });
+
+  it("没有句柄时：getDistance 读回 null，两个写命令为空操作（与本面同口径）", () => {
+    const { commands, mapDriver, detach } = createFixture();
+    detach();
+    expect(commands.getDistance(ORIGIN, AWAY)).toBeNull();
+    commands.centerAndZoom(ORIGIN, 12);
+    commands.resetHeading();
+    expect(mapDriver.centerAndZoom).not.toHaveBeenCalled();
+    expect(mapDriver.resetHeading).not.toHaveBeenCalled();
   });
 });
 
