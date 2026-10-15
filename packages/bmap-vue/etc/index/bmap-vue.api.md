@@ -1874,6 +1874,8 @@ export const MAP_SUSPEND_REASONS: {
 export interface MapCommands {
     centerAndZoom(center: Point, zoom: number, options?: ViewCommandOptions): void;
     // (undocumented)
+    centerAndZoom(city: string, zoom?: number, options?: ViewCommandOptions): void;
+    // (undocumented)
     fitBounds(bounds: Bounds): void;
     flyTo(center: Point, zoom: number, options?: FlyToOptions): void;
     // (undocumented)
@@ -1929,6 +1931,8 @@ export interface MapContext extends MapRuntimeShape {
 export interface MapDriver {
     cancelViewAnimation(map: MapHandle, animation: unknown): ViewAnimationCancelOutcome;
     centerAndZoom(map: MapHandle, center: Point, zoom: number, options?: ViewCommandOptions): void;
+    // (undocumented)
+    centerAndZoom(map: MapHandle, city: string, zoom?: number, options?: ViewCommandOptions): void;
     // (undocumented)
     checkResize(map: MapHandle): void;
     // (undocumented)

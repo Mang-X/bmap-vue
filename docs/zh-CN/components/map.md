@@ -651,7 +651,7 @@ Intersection、页面前后台与减少动画偏好的监听都挂在地图实�
 | `getZoom()` / `setZoom(zoom, options?)` | 缩放级别读写。`options` 额外收 `zoomCenter`（缩放中心点，领域 `{ lng, lat }`；不传 = 地图中心点） | `() => number \| null` / `(zoom: number, options?: SetZoomOptions) => void` |
 | `getMinZoom()` / `getMaxZoom()` | 读地图**当前生效**的缩放级别上下限（读不到给 `null`）。⚠️ 与 `<Map>` 的 `minZoom` / `maxZoom` **prop 不是同一件事**：prop 是构造期初值，这两个读的是活实例上生效的限制 | `() => number \| null` |
 | `setMinZoom(zoom)` / `setMaxZoom(zoom)` | 改**已建好**地图的缩放级别上下限（运行期命令，无句柄时空操作）。构造期初值用 `<Map>` 的 `minZoom` / `maxZoom` prop —— 两者互补，不是两种写法 | `(zoom: number) => void` |
-| `centerAndZoom(center, zoom, options?)` | **原子**设中心点 + 级别（官方 `Map#centerAndZoom`）。`options` 同 `setCenter` / `setZoom`（`noAnimation` / `callback`）。⚠️ `center` **只收点** —— 官方签名是 `Point`，**不收字符串**（字符串分支是官方给 `setCenter` 自己声明的） | `(center: { lng, lat }, zoom: number, options?: ViewCommandOptions) => void` |
+| `centerAndZoom(center, zoom, options?)` | **原子**设中心点 + 级别（官方 `Map#centerAndZoom`）。官方**两个重载**：点是「点 + **必填** zoom」；**城市名**是「city + **可选** zoom」—— 省略 zoom 时官方**自动适配展示该城市的最佳级别**。`options` 同 `setCenter` / `setZoom`（`noAnimation` / `callback`） | `(center: { lng, lat }, zoom: number, options?: ViewCommandOptions) => void` / `(city: string, zoom?: number, options?: ViewCommandOptions) => void` |
 | `getHeading()` / `setHeading(heading, options?)` | 旋转角读写（环绕角） | `() => number \| null` / `(heading: number, options?: ViewCommandOptions) => void` |
 | `resetHeading(options?)` | 把地图重置为**正北方向**（官方 `Map#resetHeading`）。与 `setHeading(0)` 的区别是官方声明的：它的重置动画**不可被打断** | `(options?: ViewCommandOptions) => void` |
 | `getTilt()` / `setTilt(tilt, options?)` | 倾斜角读写（0..73） | `() => number \| null` / `(tilt: number, options?: ViewCommandOptions) => void` |

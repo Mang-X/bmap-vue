@@ -174,13 +174,17 @@ export interface MapDriver {
   setMaxZoom(map: MapHandle, zoom: number): void;
 
   /**
-   * 同时设置中心点与级别（官方 `Map#centerAndZoom(center: Point, zoom, options?)`）。
+   * 同时设置中心点与级别（官方 `Map#centerAndZoom`）。官方有**两个重载**（`core/Map.d.ts:532` / `:555`）：
    *
-   * ⚠️ `center` 官方签名是 **`Point`**（不是 `string`）—— 与 `setCenter` 的 `Point | string`
-   * 不同（`setCenter` 的字符串分支是官方自己声明的）。两者也不是同义：`centerAndZoom` 一次原子
-   * 完成中心+级别，且它是 SDK 里让 `isLoaded()` 变为 true 的那条路径。
+   * - `centerAndZoom(center: Point, zoom: number, options?)` —— 点 + 必填级别；
+   * - `centerAndZoom(city: string, zoom?: number, options?)` —— **城市名**，`zoom` 可省，
+   *   省略时官方「自动适配展示该城市的最佳缩放级别」。
+   *
+   * 两个分支都要保留：字符串分支有官方独有的「不传 zoom 自动适配」语义，用
+   * `setCenter(city) + setZoom()` 替代会**丢掉它**，也不是原子操作。
    */
   centerAndZoom(map: MapHandle, center: Point, zoom: number, options?: ViewCommandOptions): void;
+  centerAndZoom(map: MapHandle, city: string, zoom?: number, options?: ViewCommandOptions): void;
 
   /**
    * 把地图重置为正北方向（官方 `Map#resetHeading`；`options.noAnimation` / `callback`）。

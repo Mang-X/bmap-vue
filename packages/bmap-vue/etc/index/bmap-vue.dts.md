@@ -306,6 +306,7 @@ declare const __VLS_component_2: DefineComponent<MapProps, {
     setMinZoom(zoom: number): void;
     setMaxZoom(zoom: number): void;
     centerAndZoom(center: Point, zoom: number, options?: ViewCommandOptions): void;
+    centerAndZoom(city: string, zoom?: number, options?: ViewCommandOptions): void;
     resetHeading(options?: ViewCommandOptions): void;
     setHeading(heading: number, options?: ViewCommandOptions): void;
     setTilt(tilt: number, options?: ViewCommandOptions): void;
@@ -3222,6 +3223,7 @@ export declare interface MapCommands {
     setMinZoom(zoom: number): void;
     setMaxZoom(zoom: number): void;
     centerAndZoom(center: Point, zoom: number, options?: ViewCommandOptions): void;
+    centerAndZoom(city: string, zoom?: number, options?: ViewCommandOptions): void;
     resetHeading(options?: ViewCommandOptions): void;
     setHeading(heading: number, options?: ViewCommandOptions): void;
     setTilt(tilt: number, options?: ViewCommandOptions): void;
@@ -3252,6 +3254,7 @@ export declare interface MapDriver {
     setMinZoom(map: MapHandle, zoom: number): void;
     setMaxZoom(map: MapHandle, zoom: number): void;
     centerAndZoom(map: MapHandle, center: Point, zoom: number, options?: ViewCommandOptions): void;
+    centerAndZoom(map: MapHandle, city: string, zoom?: number, options?: ViewCommandOptions): void;
     resetHeading(map: MapHandle, options?: ViewCommandOptions): void;
     setHeading(map: MapHandle, heading: number, options?: ViewCommandOptions): void;
     getHeading(map: MapHandle): number;

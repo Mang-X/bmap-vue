@@ -226,6 +226,16 @@ describe("createMapCommands：视图命令与几何（#167 工作包 B）", () =
     expect(mapDriver.getDistance).toHaveBeenCalledWith(expect.anything(), ORIGIN, AWAY);
   });
 
+  it("centerAndZoom 支持官方的**城市名重载**，含省略 zoom 的自动适配分支（#225 评审 P1）", () => {
+    const { commands, mapDriver } = createFixture();
+    // 带 zoom。
+    commands.centerAndZoom("北京", 12);
+    expect(mapDriver.centerAndZoom).toHaveBeenCalledWith(expect.anything(), "北京", 12, undefined);
+    // 省略 zoom：**不替官方补级别**，原样把 undefined 递下去（官方自动适配该城市的最佳级别）。
+    commands.centerAndZoom("上海");
+    expect(mapDriver.centerAndZoom).toHaveBeenCalledWith(expect.anything(), "上海", undefined, undefined);
+  });
+
   it("没有句柄时：getDistance 读回 null，两个写命令为空操作（与本面同口径）", () => {
     const { commands, mapDriver, detach } = createFixture();
     detach();

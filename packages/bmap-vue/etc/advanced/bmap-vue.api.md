@@ -1069,6 +1069,8 @@ export interface MapDriver {
     cancelViewAnimation(map: MapHandle, animation: unknown): ViewAnimationCancelOutcome;
     centerAndZoom(map: MapHandle, center: Point, zoom: number, options?: ViewCommandOptions): void;
     // (undocumented)
+    centerAndZoom(map: MapHandle, city: string, zoom?: number, options?: ViewCommandOptions): void;
+    // (undocumented)
     checkResize(map: MapHandle): void;
     // (undocumented)
     create(container: HTMLElement, options?: InitialMapOptions): MapHandle;

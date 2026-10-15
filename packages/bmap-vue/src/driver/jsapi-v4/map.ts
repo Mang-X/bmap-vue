@@ -873,13 +873,14 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       );
     },
 
-    centerAndZoom(map, center, zoom, options?: ViewCommandOptions) {
-      // `center` 走 `geometry.toRawPoint`：官方签名是 `Point`（不是 `string`），
-      // 与本 Facet 其它几何入参同一口径（纯数据对象不得漏给 SDK）。
+    centerAndZoom(map, center, zoom?: number, options?: ViewCommandOptions) {
+      // 两个官方重载共用这一条实现：`toRawCenter` 已经处理 `Point | string`（与 `setCenter`
+      // 同一入口）。字符串分支的 `zoom` 可省 —— 官方语义是「自动适配该城市的最佳级别」，
+      // 因此**不替它补一个级别**，原样把 `undefined` 递下去。
       callRequired(
         resolveLive(map),
         "centerAndZoom",
-        geometry.toRawPoint(center),
+        toRawCenter(center),
         zoom,
         toRawViewCommandOptions(options),
       );
@@ -917,9 +918,11 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
     },
 
     resetHeading(map, options?: ViewCommandOptions) {
-      const raw = resolveLive(map);
-      capabilities.require("map.heading");
-      callOptional(raw, "resetHeading", toRawViewCommandOptions(options));
+      // ⚠️ `callRequired`，**不是** `capabilities.require("map.heading") + callOptional`：
+      // 那条路的能力探测只覆盖 `setHeading`，一个「有 setHeading 但没有 resetHeading」的实例
+      // 会让 `callOptional` **静默 no-op**（既不归零也不报错）。既然对外承诺了独立的
+      // `resetHeading`，缺成员就该抛错（#225 评审 P2）。
+      callRequired(resolveLive(map), "resetHeading", toRawViewCommandOptions(options));
     },
 
     getHeading(map) {

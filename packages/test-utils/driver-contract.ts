@@ -178,6 +178,27 @@ export function runMapFacetContract(createHarness: () => MapFacetHarness) {
       ).toBeGreaterThan(0);
     });
 
+    it("centerAndZoom 的城市名分支不替官方补级别；options.callback 恰好交付一次（#225 评审 P1/P2）", () => {
+      const harness = createHarness();
+      const driver = harness.driver();
+      const map = driver.map.create(harness.container());
+
+      driver.map.centerAndZoom(map, "北京", 12);
+      expect(driver.map.getZoom(map)).toBe(12);
+      // 省略 zoom 的分支：官方语义是「自动适配该城市的最佳级别」，本库**不**替它补一个数字。
+      driver.map.centerAndZoom(map, "上海");
+      expect(driver.map.getZoom(map)).toBe(12);
+
+      let delivered = 0;
+      driver.map.centerAndZoom(map, { lng: 1, lat: 2 }, 9, {
+        noAnimation: true,
+        callback: () => {
+          delivered += 1;
+        },
+      });
+      expect(delivered, "options.callback 必须被交付恰好一次").toBe(1);
+    });
+
     it("normalizes bounds and size", () => {
       const harness = createHarness();
       const driver = harness.driver();

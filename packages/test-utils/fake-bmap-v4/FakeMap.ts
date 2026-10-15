@@ -699,7 +699,10 @@ export class FakeV4Map extends FakeV4EventTarget {
     }
     this.center = typeof point === 'string' ? new FakeV4Point(0, 0) : point
     if (typeof zoom === 'number') this.zoom = zoom
-    this.lastViewOptions = options ?? null
+    // 走 `recordCommandOptions`（而不是只赋 `lastViewOptions`）：它同时
+    // ① 记逐命令读数、② **交付 `options.callback` 恰好一次** —— 与其它视野命令同一契约
+    // （#225 评审 P2：只赋 lastViewOptions 会让 `centerAndZoom(..., { callback })` 永不回调）。
+    this.recordCommandOptions('centerAndZoom', options)
     // 官方语义：`load` 在**首次** centerAndZoom 之后派发一次（后续 centerAndZoom 不再派发）。
     // 夹具照实建模，否则「订阅者能不能收到 load」这件事在单测里无法验证（#28 评审 P1）。
     if (!this.loadEmitted) {

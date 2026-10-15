@@ -132,13 +132,17 @@ export interface MapCommands {
   setMinZoom(zoom: number): void;
   setMaxZoom(zoom: number): void;
   /**
-   * 同时设置中心点与级别（官方 `Map#centerAndZoom(center: Point, zoom, options?)`）。
+   * 同时设置中心点与级别（官方 `Map#centerAndZoom`，**两个重载**）。
    *
-   * ⚠️ `center` 官方签名是 **`Point`**，**不收字符串** —— 与 `setCenter` 的 `Point | string`
-   * 不同（那串是官方给 `setCenter` 自己声明的）。要「先按地名定位再设级别」，用
-   * `setCenter(city)` 然后 `setZoom`。
+   * - `centerAndZoom(center: Point, zoom: number, options?)` —— 点 + 必填级别；
+   * - `centerAndZoom(city: string, zoom?: number, options?)` —— **城市名**，`zoom` 可省；
+   *   省略时官方「自动适配展示该城市的最佳缩放级别」。
+   *
+   * ⚠️ 字符串分支**不要**用 `setCenter(city) + setZoom()` 代替：那样既不是原子操作，
+   * 也会**丢掉「不传 zoom 自动适配」**这条官方独有的语义。
    */
   centerAndZoom(center: Point, zoom: number, options?: ViewCommandOptions): void;
+  centerAndZoom(city: string, zoom?: number, options?: ViewCommandOptions): void;
   /**
    * 把地图重置为**正北方向**（官方 `Map#resetHeading`）。
    *
@@ -244,8 +248,17 @@ export function createMapCommands(source: MapCommandSource): MapCommands {
     setZoom: (zoom, options) => write((client, map) => client.driver.map.setZoom(map, zoom, options)),
     setMinZoom: (zoom) => write((client, map) => client.driver.map.setMinZoom(map, zoom)),
     setMaxZoom: (zoom) => write((client, map) => client.driver.map.setMaxZoom(map, zoom)),
-    centerAndZoom: (center, zoom, options) =>
-      write((client, map) => client.driver.map.centerAndZoom(map, center, zoom, options)),
+    centerAndZoom(center: Point | string, zoom?: number, options?: ViewCommandOptions) {
+      write((client, map) => {
+        // 官方两个重载各走一条：字符串分支的 `zoom` 可省（官方自动适配该城市的最佳级别）；
+        // 点分支 `zoom` 必填 —— 重载已保证调用方给了它，`as number` 只是把这条契约告诉 TS。
+        if (typeof center === "string") {
+          client.driver.map.centerAndZoom(map, center, zoom, options);
+        } else {
+          client.driver.map.centerAndZoom(map, center, zoom as number, options);
+        }
+      });
+    },
     resetHeading: (options) =>
       write((client, map) => client.driver.map.resetHeading(map, options)),
     setHeading: (heading, options) =>
