@@ -49,6 +49,15 @@ export interface MapCommands {
   /* ---------------------------------------------------------------- 读（返回 null = 读不到） */
   getCenter(): Point | null;
   getZoom(): number | null;
+  /**
+   * 缩放级别上下限（官方 `Map#getMinZoom` / `getMaxZoom`）。
+   *
+   * 与 `<Map>` 的 `minZoom` / `maxZoom` **prop 不是同一件事**：prop 是构造期 `MapOptions`
+   * 初值，这两个读的是**地图当前生效**的限制（用户交互与 `setZoom` 都受它约束）。读不到
+   * （无句柄 / 已销毁 / 本引擎无此能力）一律返回 `null`，与本面其余读命令同口径。
+   */
+  getMinZoom(): number | null;
+  getMaxZoom(): number | null;
   getHeading(): number | null;
   getTilt(): number | null;
   getBounds(): Bounds | null;
@@ -109,6 +118,13 @@ export interface MapCommands {
    */
   setCenter(center: Point | string, options?: ViewCommandOptions): void;
   setZoom(zoom: number, options?: SetZoomOptions): void;
+  /**
+   * 改**已建好**地图的缩放级别上下限（官方 `Map#setMinZoom` / `setMaxZoom`）。
+   *
+   * 与构造期 prop 的区别同 {@link getMinZoom}：这是运行期命令，作用在活实例上。无句柄时空操作。
+   */
+  setMinZoom(zoom: number): void;
+  setMaxZoom(zoom: number): void;
   setHeading(heading: number, options?: ViewCommandOptions): void;
   setTilt(tilt: number, options?: ViewCommandOptions): void;
 
@@ -188,6 +204,8 @@ export function createMapCommands(source: MapCommandSource): MapCommands {
   return {
     getCenter: () => read((client, map) => client.driver.map.getCenter(map)),
     getZoom: () => read((client, map) => client.driver.map.getZoom(map)),
+    getMinZoom: () => read((client, map) => client.driver.map.getMinZoom(map)),
+    getMaxZoom: () => read((client, map) => client.driver.map.getMaxZoom(map)),
     getHeading: () => read((client, map) => client.driver.map.getHeading(map)),
     getTilt: () => read((client, map) => client.driver.map.getTilt(map)),
     getBounds: () => read((client, map) => client.driver.map.getBounds(map)),
@@ -202,6 +220,8 @@ export function createMapCommands(source: MapCommandSource): MapCommands {
     setCenter: (center, options) =>
       write((client, map) => client.driver.map.setCenter(map, center, options)),
     setZoom: (zoom, options) => write((client, map) => client.driver.map.setZoom(map, zoom, options)),
+    setMinZoom: (zoom) => write((client, map) => client.driver.map.setMinZoom(map, zoom)),
+    setMaxZoom: (zoom) => write((client, map) => client.driver.map.setMaxZoom(map, zoom)),
     setHeading: (heading, options) =>
       write((client, map) => client.driver.map.setHeading(map, heading, options)),
     setTilt: (tilt, options) => write((client, map) => client.driver.map.setTilt(map, tilt, options)),

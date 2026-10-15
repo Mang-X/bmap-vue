@@ -90,6 +90,12 @@ export class FakeV4Map extends FakeV4EventTarget {
   options: Record<string, unknown>
   center: FakeV4Point | null = null
   zoom: number | null = null
+  /**
+   * 缩放级别上下限（官方 `BMap.Map` 的 `getMinZoom` / `getMaxZoom` / `setMinZoom` / `setMaxZoom`）。
+   * 官方 `MapOptions` 只声明范围 [3, 21]、没有文档化默认值，这里取 Baidu 常用初值。
+   */
+  minZoom = 3
+  maxZoom = 19
   heading = 0
   tilt = 0
   mapType: string | null = null
@@ -615,6 +621,14 @@ export class FakeV4Map extends FakeV4EventTarget {
         ? document.getElementById(container) ?? document.createElement('div')
         : container
     this.options = options
+    // 官方 `BMap.Map` 在**构造期**接受 `MapOptions.minZoom` / `maxZoom`（范围 [3, 21]），
+    // 建图那一刻就该生效 —— `getMinZoom()` / `getMaxZoom()` 必须读得到。
+    //
+    // 不应用它的后果很具体（#224 评审 P1）：只覆盖 `setMinZoom` / `setMaxZoom` 的用例会全绿，
+    // 而「带自定义上下限创建 → 直接读回」这条路径永远静默返回初值（连 `<Map>` 的默认
+    // `maxZoom: 21` 都会读成 19），等于把初始值缺陷藏起来。
+    if (typeof options.minZoom === 'number') this.minZoom = options.minZoom
+    if (typeof options.maxZoom === 'number') this.maxZoom = options.maxZoom
     // 生命周期类：传实例，让「同一实例重复销毁」与「另一个实例真的被释放」可区分
     this.stats.resourceCreated('map', this)
   }
@@ -712,6 +726,24 @@ export class FakeV4Map extends FakeV4EventTarget {
 
   getZoom(): number | null {
     return this.zoom
+  }
+
+  getMinZoom(): number {
+    return this.minZoom
+  }
+
+  getMaxZoom(): number {
+    return this.maxZoom
+  }
+
+  setMinZoom(zoom: number): void {
+    this.callLog.push('setMinZoom')
+    this.minZoom = zoom
+  }
+
+  setMaxZoom(zoom: number): void {
+    this.callLog.push('setMaxZoom')
+    this.maxZoom = zoom
   }
 
   /** 按中心点与级别推导的可视范围（空范围 = 尚未初始化，与官方 `getBounds()` 语义一致）。 */

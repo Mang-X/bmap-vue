@@ -649,6 +649,8 @@ Intersection、页面前后台与减少动画偏好的监听都挂在地图实�
 | `getCenter()` | 读当前中心点（读不到给 `null`） | `() => { lng, lat } \| null` |
 | `setCenter(center, options?)` | 设置中心点（不含 zoom，不会重置级别）。`center` 对齐官方 `setCenter(center: Point \| string, options?)` 的**两个分支**：点，或城市名 / 地址字符串 | `(center: { lng, lat } \| string, options?: ViewCommandOptions) => void` |
 | `getZoom()` / `setZoom(zoom, options?)` | 缩放级别读写。`options` 额外收 `zoomCenter`（缩放中心点，领域 `{ lng, lat }`；不传 = 地图中心点） | `() => number \| null` / `(zoom: number, options?: SetZoomOptions) => void` |
+| `getMinZoom()` / `getMaxZoom()` | 读地图**当前生效**的缩放级别上下限（读不到给 `null`）。⚠️ 与 `<Map>` 的 `minZoom` / `maxZoom` **prop 不是同一件事**：prop 是构造期初值，这两个读的是活实例上生效的限制 | `() => number \| null` |
+| `setMinZoom(zoom)` / `setMaxZoom(zoom)` | 改**已建好**地图的缩放级别上下限（运行期命令，无句柄时空操作）。构造期初值用 `<Map>` 的 `minZoom` / `maxZoom` prop —— 两者互补，不是两种写法 | `(zoom: number) => void` |
 | `getHeading()` / `setHeading(heading, options?)` | 旋转角读写（环绕角） | `() => number \| null` / `(heading: number, options?: ViewCommandOptions) => void` |
 | `getTilt()` / `setTilt(tilt, options?)` | 倾斜角读写（0..73） | `() => number \| null` / `(tilt: number, options?: ViewCommandOptions) => void` |
 | `getBounds()` | 读可视范围 | `() => Bounds \| null` |

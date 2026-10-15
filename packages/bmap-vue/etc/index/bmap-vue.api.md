@@ -1881,6 +1881,9 @@ export interface MapCommands {
     getCenter(): Point | null;
     // (undocumented)
     getHeading(): number | null;
+    // (undocumented)
+    getMaxZoom(): number | null;
+    getMinZoom(): number | null;
     getScreenshot(): string | null;
     // (undocumented)
     getSize(): Size | null;
@@ -1895,6 +1898,9 @@ export interface MapCommands {
     setCenter(center: Point | string, options?: ViewCommandOptions): void;
     // (undocumented)
     setHeading(heading: number, options?: ViewCommandOptions): void;
+    // (undocumented)
+    setMaxZoom(zoom: number): void;
+    setMinZoom(zoom: number): void;
     // (undocumented)
     setTilt(tilt: number, options?: ViewCommandOptions): void;
     // (undocumented)
@@ -1933,6 +1939,9 @@ export interface MapDriver {
     getCenter(map: MapHandle): Point;
     // (undocumented)
     getHeading(map: MapHandle): number;
+    // (undocumented)
+    getMaxZoom(map: MapHandle): number;
+    getMinZoom(map: MapHandle): number;
     getScreenshot(map: MapHandle): string;
     // (undocumented)
     getSize(map: MapHandle): Size;
@@ -1959,6 +1968,10 @@ export interface MapDriver {
     setMapStyle(map: MapHandle, style: MapStyleInput): void;
     // (undocumented)
     setMapType(map: MapHandle, type: MapType_2): void;
+    // (undocumented)
+    setMaxZoom(map: MapHandle, zoom: number): void;
+    // (undocumented)
+    setMinZoom(map: MapHandle, zoom: number): void;
     // (undocumented)
     setTilt(map: MapHandle, tilt: number, options?: ViewCommandOptions): void;
     // (undocumented)
