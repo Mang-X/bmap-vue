@@ -621,6 +621,14 @@ export class FakeV4Map extends FakeV4EventTarget {
         ? document.getElementById(container) ?? document.createElement('div')
         : container
     this.options = options
+    // 官方 `BMap.Map` 在**构造期**接受 `MapOptions.minZoom` / `maxZoom`（范围 [3, 21]），
+    // 建图那一刻就该生效 —— `getMinZoom()` / `getMaxZoom()` 必须读得到。
+    //
+    // 不应用它的后果很具体（#224 评审 P1）：只覆盖 `setMinZoom` / `setMaxZoom` 的用例会全绿，
+    // 而「带自定义上下限创建 → 直接读回」这条路径永远静默返回初值（连 `<Map>` 的默认
+    // `maxZoom: 21` 都会读成 19），等于把初始值缺陷藏起来。
+    if (typeof options.minZoom === 'number') this.minZoom = options.minZoom
+    if (typeof options.maxZoom === 'number') this.maxZoom = options.maxZoom
     // 生命周期类：传实例，让「同一实例重复销毁」与「另一个实例真的被释放」可区分
     this.stats.resourceCreated('map', this)
   }

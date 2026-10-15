@@ -141,15 +141,20 @@ export function runMapFacetContract(createHarness: () => MapFacetHarness) {
       expect(driver.map.getTilt(map)).toBe(30);
     });
 
-    it("round-trips zoom limits（#167 工作包 B：作用在已建好的地图上）", () => {
+    it("round-trips zoom limits：构造期初值可读回，运行期命令再覆盖（#167 工作包 B）", () => {
       const harness = createHarness();
       const driver = harness.driver();
-      const map = driver.map.create(harness.container());
-
-      driver.map.setMinZoom(map, 5);
-      driver.map.setMaxZoom(map, 18);
+      // 构造期给的上下限，**建图那一刻**就要生效 —— 这条与下面 set→get 是**两条不同路径**
+      // （#224 评审 P1：只测 set→get 会让「带上下限创建 → 直接读回」永远静默返回初值）。
+      const map = driver.map.create(harness.container(), { minZoom: 5, maxZoom: 18 });
       expect(driver.map.getMinZoom(map)).toBe(5);
       expect(driver.map.getMaxZoom(map)).toBe(18);
+
+      // 运行期命令覆盖构造期初值（这两个是 `BMap.Map` 实例方法，作用在已建好的地图上）。
+      driver.map.setMinZoom(map, 7);
+      driver.map.setMaxZoom(map, 16);
+      expect(driver.map.getMinZoom(map)).toBe(7);
+      expect(driver.map.getMaxZoom(map)).toBe(16);
     });
 
     it("normalizes bounds and size", () => {
