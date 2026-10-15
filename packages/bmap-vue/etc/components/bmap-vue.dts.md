@@ -290,6 +290,7 @@ declare const __VLS_component_2: DefineComponent<MapProps, {
     getZoom(): number | null;
     getMinZoom(): number | null;
     getMaxZoom(): number | null;
+    getDistance(start: Point, end: Point): number | null;
     getHeading(): number | null;
     getTilt(): number | null;
     getBounds(): Bounds_2 | null;
@@ -300,6 +301,8 @@ declare const __VLS_component_2: DefineComponent<MapProps, {
     setZoom(zoom: number, options?: SetZoomOptions_2): void;
     setMinZoom(zoom: number): void;
     setMaxZoom(zoom: number): void;
+    centerAndZoom(center: Point, zoom: number, options?: ViewCommandOptions_2): void;
+    resetHeading(options?: ViewCommandOptions_2): void;
     setHeading(heading: number, options?: ViewCommandOptions_2): void;
     setTilt(tilt: number, options?: ViewCommandOptions_2): void;
     panTo(point: Point, options?: PanToOptions_2): void;
@@ -2447,12 +2450,15 @@ declare interface MapDriver {
     getMaxZoom(map: MapHandle): number;
     setMinZoom(map: MapHandle, zoom: number): void;
     setMaxZoom(map: MapHandle, zoom: number): void;
+    centerAndZoom(map: MapHandle, center: Point, zoom: number, options?: ViewCommandOptions): void;
+    resetHeading(map: MapHandle, options?: ViewCommandOptions): void;
     setHeading(map: MapHandle, heading: number, options?: ViewCommandOptions): void;
     getHeading(map: MapHandle): number;
     setTilt(map: MapHandle, tilt: number, options?: ViewCommandOptions): void;
     getTilt(map: MapHandle): number;
     getBounds(map: MapHandle): Bounds;
     getSize(map: MapHandle): Size;
+    getDistance(map: MapHandle, start: Point, end: Point): number;
     pointToPixel(map: MapHandle, point: Point): Pixel;
     pixelToPoint(map: MapHandle, pixel: Pixel): Point;
     panTo(map: MapHandle, point: Point, options?: PanToOptions): void;

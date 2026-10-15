@@ -873,6 +873,18 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       );
     },
 
+    centerAndZoom(map, center, zoom, options?: ViewCommandOptions) {
+      // `center` 走 `geometry.toRawPoint`：官方签名是 `Point`（不是 `string`），
+      // 与本 Facet 其它几何入参同一口径（纯数据对象不得漏给 SDK）。
+      callRequired(
+        resolveLive(map),
+        "centerAndZoom",
+        geometry.toRawPoint(center),
+        zoom,
+        toRawViewCommandOptions(options),
+      );
+    },
+
     getZoom(map) {
       const raw = resolveLive(map);
       return numberOf("map.getZoom", callRequired(raw, "getZoom"));
@@ -904,6 +916,12 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
       callOptional(raw, "setHeading", heading, toRawViewCommandOptions(options));
     },
 
+    resetHeading(map, options?: ViewCommandOptions) {
+      const raw = resolveLive(map);
+      capabilities.require("map.heading");
+      callOptional(raw, "resetHeading", toRawViewCommandOptions(options));
+    },
+
     getHeading(map) {
       const raw = resolveLive(map);
       capabilities.require("map.heading");
@@ -930,6 +948,14 @@ export function createJsapiV4MapDriver(input: CreateJsapiV4MapDriverInput): MapD
     getSize(map) {
       const raw = resolveLive(map);
       return geometry.fromRawSize(callRequired(raw, "getSize"));
+    },
+
+    getDistance(map, start, end) {
+      const raw = resolveLive(map);
+      return numberOf(
+        "map.getDistance",
+        callRequired(raw, "getDistance", geometry.toRawPoint(start), geometry.toRawPoint(end)),
+      );
     },
 
     pointToPixel(map, point) {

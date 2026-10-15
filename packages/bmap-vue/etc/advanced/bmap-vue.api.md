@@ -1067,6 +1067,7 @@ export interface LocationCommandApi {
 // @public (undocumented)
 export interface MapDriver {
     cancelViewAnimation(map: MapHandle, animation: unknown): ViewAnimationCancelOutcome;
+    centerAndZoom(map: MapHandle, center: Point, zoom: number, options?: ViewCommandOptions): void;
     // (undocumented)
     checkResize(map: MapHandle): void;
     // (undocumented)
@@ -1079,6 +1080,7 @@ export interface MapDriver {
     getBounds(map: MapHandle): Bounds;
     // (undocumented)
     getCenter(map: MapHandle): Point;
+    getDistance(map: MapHandle, start: Point, end: Point): number;
     // (undocumented)
     getHeading(map: MapHandle): number;
     // (undocumented)
@@ -1100,6 +1102,7 @@ export interface MapDriver {
     panTo(map: MapHandle, point: Point, options?: PanToOptions): void;
     pixelToPoint(map: MapHandle, pixel: Pixel): Point;
     pointToPixel(map: MapHandle, point: Point): Pixel;
+    resetHeading(map: MapHandle, options?: ViewCommandOptions): void;
     // (undocumented)
     setCenter(map: MapHandle, center: Point | string, options?: ViewCommandOptions): void;
     // (undocumented)

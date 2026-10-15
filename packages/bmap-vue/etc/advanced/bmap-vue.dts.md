@@ -622,12 +622,15 @@ export declare interface MapDriver {
     getMaxZoom(map: MapHandle): number;
     setMinZoom(map: MapHandle, zoom: number): void;
     setMaxZoom(map: MapHandle, zoom: number): void;
+    centerAndZoom(map: MapHandle, center: Point, zoom: number, options?: ViewCommandOptions): void;
+    resetHeading(map: MapHandle, options?: ViewCommandOptions): void;
     setHeading(map: MapHandle, heading: number, options?: ViewCommandOptions): void;
     getHeading(map: MapHandle): number;
     setTilt(map: MapHandle, tilt: number, options?: ViewCommandOptions): void;
     getTilt(map: MapHandle): number;
     getBounds(map: MapHandle): Bounds;
     getSize(map: MapHandle): Size;
+    getDistance(map: MapHandle, start: Point, end: Point): number;
     pointToPixel(map: MapHandle, point: Point): Pixel;
     pixelToPoint(map: MapHandle, pixel: Pixel): Point;
     panTo(map: MapHandle, point: Point, options?: PanToOptions): void;

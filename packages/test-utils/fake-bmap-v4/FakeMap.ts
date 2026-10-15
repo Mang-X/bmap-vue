@@ -746,6 +746,30 @@ export class FakeV4Map extends FakeV4EventTarget {
     this.maxZoom = zoom
   }
 
+  /** 官方 `Map#resetHeading`：把旋转角归零（动画不可打断，Fake 不建模动画）。 */
+  resetHeading(options?: Record<string, unknown>): void {
+    this.callLog.push('resetHeading')
+    this.heading = 0
+    this.recordCommandOptions('resetHeading', options)
+  }
+
+  /**
+   * 官方 `Map#getDistance(start, end)`：两点间球面距离（**米**）。纯计算，与地图状态无关。
+   *
+   * Fake 用标准的 haversine，量级与真实 SDK 一致 —— 用例断言的是「同点 = 0 / 不同点为正 /
+   * 与经纬度量级相称」这类不变量，不去逐位比对 SDK 的取值（那是实现细节，不是契约）。
+   */
+  getDistance(start: FakeV4Point, end: FakeV4Point): number {
+    const toRad = (deg: number) => (deg * Math.PI) / 180
+    const earthRadius = 6371008.8
+    const dLat = toRad(end.lat - start.lat)
+    const dLng = toRad(end.lng - start.lng)
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(start.lat)) * Math.cos(toRad(end.lat)) * Math.sin(dLng / 2) ** 2
+    return 2 * earthRadius * Math.asin(Math.sqrt(a))
+  }
+
   /** 按中心点与级别推导的可视范围（空范围 = 尚未初始化，与官方 `getBounds()` 语义一致）。 */
   getBounds(): FakeV4Bounds {
     if (!this.center || this.zoom === null) return new FakeV4Bounds()

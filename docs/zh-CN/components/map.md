@@ -651,10 +651,13 @@ Intersection、页面前后台与减少动画偏好的监听都挂在地图实�
 | `getZoom()` / `setZoom(zoom, options?)` | 缩放级别读写。`options` 额外收 `zoomCenter`（缩放中心点，领域 `{ lng, lat }`；不传 = 地图中心点） | `() => number \| null` / `(zoom: number, options?: SetZoomOptions) => void` |
 | `getMinZoom()` / `getMaxZoom()` | 读地图**当前生效**的缩放级别上下限（读不到给 `null`）。⚠️ 与 `<Map>` 的 `minZoom` / `maxZoom` **prop 不是同一件事**：prop 是构造期初值，这两个读的是活实例上生效的限制 | `() => number \| null` |
 | `setMinZoom(zoom)` / `setMaxZoom(zoom)` | 改**已建好**地图的缩放级别上下限（运行期命令，无句柄时空操作）。构造期初值用 `<Map>` 的 `minZoom` / `maxZoom` prop —— 两者互补，不是两种写法 | `(zoom: number) => void` |
+| `centerAndZoom(center, zoom, options?)` | **原子**设中心点 + 级别（官方 `Map#centerAndZoom`）。`options` 同 `setCenter` / `setZoom`（`noAnimation` / `callback`）。⚠️ `center` **只收点** —— 官方签名是 `Point`，**不收字符串**（字符串分支是官方给 `setCenter` 自己声明的） | `(center: { lng, lat }, zoom: number, options?: ViewCommandOptions) => void` |
 | `getHeading()` / `setHeading(heading, options?)` | 旋转角读写（环绕角） | `() => number \| null` / `(heading: number, options?: ViewCommandOptions) => void` |
+| `resetHeading(options?)` | 把地图重置为**正北方向**（官方 `Map#resetHeading`）。与 `setHeading(0)` 的区别是官方声明的：它的重置动画**不可被打断** | `(options?: ViewCommandOptions) => void` |
 | `getTilt()` / `setTilt(tilt, options?)` | 倾斜角读写（0..73） | `() => number \| null` / `(tilt: number, options?: ViewCommandOptions) => void` |
 | `getBounds()` | 读可视范围 | `() => Bounds \| null` |
 | `getSize()` | 读地图尺寸 | `() => Size \| null` |
+| `getDistance(start, end)` | 两点间距离，**米**（官方 `Map#getDistance`）。纯计算，与地图状态无关 | `(start: { lng, lat }, end: { lng, lat }) => number \| null` |
 | `getViewport(view, options?)` | **只读**算「把这些点 / 这个范围装进视野应该是什么中心与级别」，**不改**当前视野。`view` 收点数组或 `Bounds`；`options` 是官方 `ViewportOptions`（`enableAnimation` / `margins` / `zoomFactor` / `callback`） | `(view: readonly Point[] \| Bounds, options?: ViewportOptions) => Viewport \| null` |
 | `getScreenshot()` | 取当前画布截图（Data URL 字符串）。⚠️ 官方两条限制本库不隐瞒：**地球模式不支持**；建图时**必须**带 `preserveDrawingBuffer: true`，否则拿到的是**空画布**。该 prop 是**建图期**选项，事后补不上 | `() => string \| null` |
 | `panTo(point, options?)` / `panBy(pixel)` | 平移到点 / 按像素平移。`panTo` 的 `options` 额外收 `duration`（动画时长，毫秒）。⚠️ `panBy` 的参数形态与官方 `panBy(x: number, y: number, options?)` **不同**：本库收一个 `Pixel` 对象，Driver 内部拆成 `x, y` 两个数字下发（判定为**有意的适配**，不是待修的偏差） | `(point: { lng, lat }, options?: PanToOptions) => void` / `(pixel: { x, y }) => void` |

@@ -157,6 +157,27 @@ export function runMapFacetContract(createHarness: () => MapFacetHarness) {
       expect(driver.map.getMaxZoom(map)).toBe(16);
     });
 
+    it("centerAndZoom 原子设中心+级别、resetHeading 归零、getDistance 是纯几何（#167 工作包 B）", () => {
+      const harness = createHarness();
+      const driver = harness.driver();
+      const map = driver.map.create(harness.container());
+
+      driver.map.centerAndZoom(map, { lng: 116.4, lat: 39.9 }, 12);
+      expect(driver.map.getCenter(map)).toEqual({ lng: 116.4, lat: 39.9 });
+      expect(driver.map.getZoom(map)).toBe(12);
+
+      driver.map.setHeading(map, 45);
+      expect(driver.map.getHeading(map)).toBe(45);
+      driver.map.resetHeading(map);
+      expect(driver.map.getHeading(map)).toBe(0);
+
+      const at = { lng: 116.4, lat: 39.9 };
+      expect(driver.map.getDistance(map, at, at)).toBe(0);
+      expect(
+        driver.map.getDistance(map, at, { lng: 117.2, lat: 39.0 }),
+      ).toBeGreaterThan(0);
+    });
+
     it("normalizes bounds and size", () => {
       const harness = createHarness();
       const driver = harness.driver();

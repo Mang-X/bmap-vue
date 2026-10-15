@@ -173,6 +173,22 @@ export interface MapDriver {
   setMinZoom(map: MapHandle, zoom: number): void;
   setMaxZoom(map: MapHandle, zoom: number): void;
 
+  /**
+   * 同时设置中心点与级别（官方 `Map#centerAndZoom(center: Point, zoom, options?)`）。
+   *
+   * ⚠️ `center` 官方签名是 **`Point`**（不是 `string`）—— 与 `setCenter` 的 `Point | string`
+   * 不同（`setCenter` 的字符串分支是官方自己声明的）。两者也不是同义：`centerAndZoom` 一次原子
+   * 完成中心+级别，且它是 SDK 里让 `isLoaded()` 变为 true 的那条路径。
+   */
+  centerAndZoom(map: MapHandle, center: Point, zoom: number, options?: ViewCommandOptions): void;
+
+  /**
+   * 把地图重置为正北方向（官方 `Map#resetHeading`；`options.noAnimation` / `callback`）。
+   *
+   * 与 `setHeading(map, 0)` 的区别是官方声明的：`resetHeading` 的**动画不可被打断**。
+   */
+  resetHeading(map: MapHandle, options?: ViewCommandOptions): void;
+
   setHeading(map: MapHandle, heading: number, options?: ViewCommandOptions): void;
   getHeading(map: MapHandle): number;
 
@@ -181,6 +197,9 @@ export interface MapDriver {
 
   getBounds(map: MapHandle): Bounds;
   getSize(map: MapHandle): Size;
+
+  /** 两点间距离，**米**（官方 `Map#getDistance(start: Point, end: Point): number`）。纯计算，与地图状态无关。 */
+  getDistance(map: MapHandle, start: Point, end: Point): number;
 
   /** 经纬度 → 屏幕像素（v4 `pointToPixel`；不传 options，按当前地图状态换算） */
   pointToPixel(map: MapHandle, point: Point): Pixel;

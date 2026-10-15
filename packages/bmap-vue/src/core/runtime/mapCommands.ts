@@ -58,6 +58,12 @@ export interface MapCommands {
    */
   getMinZoom(): number | null;
   getMaxZoom(): number | null;
+  /**
+   * 两点间距离，**米**（官方 `Map#getDistance(start: Point, end: Point): number`）。
+   *
+   * 纯计算，与地图状态无关；无句柄时返回 `null`（与本面其余读命令同口径）。
+   */
+  getDistance(start: Point, end: Point): number | null;
   getHeading(): number | null;
   getTilt(): number | null;
   getBounds(): Bounds | null;
@@ -125,6 +131,20 @@ export interface MapCommands {
    */
   setMinZoom(zoom: number): void;
   setMaxZoom(zoom: number): void;
+  /**
+   * 同时设置中心点与级别（官方 `Map#centerAndZoom(center: Point, zoom, options?)`）。
+   *
+   * ⚠️ `center` 官方签名是 **`Point`**，**不收字符串** —— 与 `setCenter` 的 `Point | string`
+   * 不同（那串是官方给 `setCenter` 自己声明的）。要「先按地名定位再设级别」，用
+   * `setCenter(city)` 然后 `setZoom`。
+   */
+  centerAndZoom(center: Point, zoom: number, options?: ViewCommandOptions): void;
+  /**
+   * 把地图重置为**正北方向**（官方 `Map#resetHeading`）。
+   *
+   * 与 `setHeading(0)` 的区别是官方声明的：`resetHeading` 的重置动画**不可被打断**。
+   */
+  resetHeading(options?: ViewCommandOptions): void;
   setHeading(heading: number, options?: ViewCommandOptions): void;
   setTilt(tilt: number, options?: ViewCommandOptions): void;
 
@@ -206,6 +226,8 @@ export function createMapCommands(source: MapCommandSource): MapCommands {
     getZoom: () => read((client, map) => client.driver.map.getZoom(map)),
     getMinZoom: () => read((client, map) => client.driver.map.getMinZoom(map)),
     getMaxZoom: () => read((client, map) => client.driver.map.getMaxZoom(map)),
+    getDistance: (start, end) =>
+      read((client, map) => client.driver.map.getDistance(map, start, end)),
     getHeading: () => read((client, map) => client.driver.map.getHeading(map)),
     getTilt: () => read((client, map) => client.driver.map.getTilt(map)),
     getBounds: () => read((client, map) => client.driver.map.getBounds(map)),
@@ -222,6 +244,10 @@ export function createMapCommands(source: MapCommandSource): MapCommands {
     setZoom: (zoom, options) => write((client, map) => client.driver.map.setZoom(map, zoom, options)),
     setMinZoom: (zoom) => write((client, map) => client.driver.map.setMinZoom(map, zoom)),
     setMaxZoom: (zoom) => write((client, map) => client.driver.map.setMaxZoom(map, zoom)),
+    centerAndZoom: (center, zoom, options) =>
+      write((client, map) => client.driver.map.centerAndZoom(map, center, zoom, options)),
+    resetHeading: (options) =>
+      write((client, map) => client.driver.map.resetHeading(map, options)),
     setHeading: (heading, options) =>
       write((client, map) => client.driver.map.setHeading(map, heading, options)),
     setTilt: (tilt, options) => write((client, map) => client.driver.map.setTilt(map, tilt, options)),
