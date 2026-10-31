@@ -102,7 +102,7 @@
     "@vitejs/plugin-vue": "^6.0.8",
     "@vue/test-utils": "^2.5.0",
     "@vueuse/core": "14.4.0",
-    "happy-dom": "^20.14.0",
+    "happy-dom": "^21.0.4",
     "jsdom": "^30.0.1",
     "publint": "0.3.24",
     "typescript": "^5.9.0",
